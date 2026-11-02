@@ -43,16 +43,39 @@
     if (!r.ok) throw new Error(data.galat || 'Permintaan gagal (' + r.status + ')');
     return data;
   }
+  // mode lokal hanya di komputer sendiri (npm run dev); di situs online komentar wajib ke server supaya tidak diam-diam
+  // tersimpan di satu peramban saja
+  const DI_KOMPUTER = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   async function muat() {
     if (st.mode === 'lokal') { st.data = lokal.semua(); return; }
     try {
       st.data = await minta('GET', API);
       st.mode = 'server';
       st.pesan = '';
+      await pindahkanLokal();
     } catch (e) {
-      if (e.tanpaApi) { st.mode = 'lokal'; st.pesan = 'Mode lokal: server komentar tidak ada, komentar hanya tersimpan di peramban ini.'; st.data = lokal.semua(); }
-      else { st.mode = 'galat'; st.pesan = 'Server komentar bermasalah: ' + e.message; }
+      if (e.tanpaApi && DI_KOMPUTER) { st.mode = 'lokal'; st.pesan = 'Mode lokal: server komentar tidak ada, komentar hanya tersimpan di peramban ini.'; st.data = lokal.semua(); }
+      else if (e.tanpaApi) { st.mode = 'galat'; st.pesan = 'Komentar belum bisa disimpan: server komentar (/api/komentar) tidak ada di situs ini. Hubungi pengelola situs.'; st.data = []; }
+      else { st.mode = 'galat'; st.pesan = 'Komentar belum bisa disimpan. Server komentar bermasalah: ' + e.message; st.data = []; }
     }
+  }
+  // komentar yang dulu tersimpan di peramban ini (versi lama / sebelum server siap) dikirim ke server sekali, lalu dihapus dari peramban
+  async function pindahkanLokal() {
+    const sisa = lokal.semua();
+    if (!sisa.length) return;
+    const idBaru = new Map();
+    const gagal = [];
+    for (const k of sisa.slice().sort((a, b) => (a.induk == null ? 0 : 1) - (b.induk == null ? 0 : 1) || a.id - b.id)) {
+      if (k.induk != null && !idBaru.has(k.induk)) { gagal.push(k); continue; }
+      try {
+        const baru = await minta('POST', API, { halaman: k.halaman, jangkar: k.jangkar, teks: k.teks, nama: k.nama, penulis: k.penulis || penulis, versi: k.versi, induk: k.induk == null ? null : idBaru.get(k.induk) });
+        if (k.status && k.status !== 'baru') Object.assign(baru, await minta('PATCH', API + '/' + baru.id, { status: k.status, oleh: k.status_oleh }));
+        idBaru.set(k.id, baru.id);
+        st.data.push(baru);
+      } catch { gagal.push(k); }
+    }
+    lokal.tulis(gagal);
+    if (idBaru.size) st.pesan = idBaru.size + ' komentar yang tadinya hanya tersimpan di peramban ini sudah dipindahkan ke server.';
   }
   async function tambah(k) {
     if (st.mode === 'lokal') {
@@ -241,8 +264,9 @@
         title="${esc('#' + k.id + ' ' + k.nama + ': ' + k.teks.slice(0, 80) + (p.geser ? ' (posisi asli berubah)' : ''))}">${k.id}</div>`).join('');
       const jml = induk().filter(k => k.status !== 'selesai' && k.status !== 'ditolak').length;
       const b = fab.querySelector('.kmt-jml');
-      b.style.display = jml ? '' : 'none';
-      b.textContent = jml;
+      // tanda seru = komentar tidak bisa disimpan (server bermasalah); buka daftar untuk pesannya
+      b.style.display = jml || st.mode === 'galat' ? '' : 'none';
+      b.textContent = st.mode === 'galat' ? '!' : jml;
     }, 16);
   }
 
