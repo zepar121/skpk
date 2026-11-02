@@ -8,7 +8,7 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "cf": "astro build && npx --yes wrangler@4 pages dev dist --d1 DB --port 8788",
+    "cf": "npx --yes wrangler@4 dev --port 8788",
     "samarkan": "node scripts/samarkan-data.mjs"
   },
   "dependencies": {

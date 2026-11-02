@@ -1,0 +1,18 @@
+// Cloudflare Worker "skpk" (https://skpk.asyerf.workers.dev), dibangun otomatis dari GitHub (Workers Builds).
+// D1 "skpk-komentar" tanpa database_id: saat deploy Wrangler menyambungkan database dengan nama itu,
+// atau membuatnya bila belum ada. Komentar ada di database ini, terpisah dari kode, jadi tidak hilang saat deploy ulang.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "skpk",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-09-01",
+  "build": { "command": "npm run build" },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "skpk-komentar" }
+  ]
+}

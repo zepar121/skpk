@@ -2,8 +2,8 @@
 // SKPK v2: tampilan CEISA 4.0 Smart PCC (As-Is) dengan mesin flag, riwayat, dan tarif dari prototipe To-Be.
 // Halaman diatur public/js/app.js lewat hash: #/smart-pcc/browse-pib, #/smart-pcc/penelitian-skpk, dst.
 import '../styles/style.css';
-// versi situs untuk komentar = 7 karakter commit (diisi Cloudflare Pages saat build), "lokal" di komputer sendiri
-const versi = (process.env.CF_PAGES_COMMIT_SHA || '').slice(0, 7) || 'lokal';
+// versi situs untuk komentar = 7 karakter commit (diisi Cloudflare Workers Builds / Pages saat build), "lokal" di komputer sendiri
+const versi = (process.env.WORKERS_CI_COMMIT_SHA || process.env.CF_PAGES_COMMIT_SHA || '').slice(0, 7) || 'lokal';
 ---
 <!doctype html>
 <html lang="id" data-versi={versi}>

@@ -28,7 +28,10 @@ Tombol bulat di kanan bawah (lapisan di atas situs, bukan bagian desain CEISA):
   saring per status, klik untuk membuka halaman dan utasnya, **Unduh CSV** untuk dipelajari.
 - Klik pin: baca utas, balas, ubah status (Baru / Sedang diperbaiki / Selesai / Tidak dikerjakan), hapus komentar sendiri.
 
-Penyimpanan: Cloudflare D1 (database terpisah dari kode) lewat `functions/api/komentar*.js` dan `lib/db.js`; tabel dibuat otomatis.
+Online di **https://skpk.asyerf.workers.dev** (Cloudflare Worker `skpk`, dibangun otomatis tiap push ke GitHub `zepar121/skpk`).
+`wrangler.jsonc` mengatur Worker: `worker/index.js` menjawab `/api/komentar*`, sisanya file statis dari `dist`.
+Penyimpanan: Cloudflare D1 `skpk-komentar` (database terpisah dari kode, disambung lewat nama; dibuat otomatis saat deploy bila belum ada)
+lewat `functions/api/komentar*.js` dan `lib/db.js`; tabel dibuat otomatis. Folder `functions/` juga membuat situs bisa jalan di Cloudflare Pages.
 Karena terpisah, komentar **tidak hilang** saat situs diperbarui (push ke GitHub → Cloudflare membangun ulang). "Hapus" hanya menandai,
 datanya tetap di database. Tiap komentar mencatat halaman, elemen yang diklik (selektor, teks, untuk sel tabel: id baris + judul kolom),
 koordinat cadangan, dan versi situs (commit). Bila setelah perbaikan elemennya tidak ada lagi, pin tampil bergaris putus-putus
