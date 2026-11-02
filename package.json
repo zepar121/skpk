@@ -1,0 +1,17 @@
+{
+  "name": "skpk-v2",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "cf": "astro build && npx --yes wrangler@4 pages dev dist --d1 DB --port 8788",
+    "samarkan": "node scripts/samarkan-data.mjs"
+  },
+  "dependencies": {
+    "astro": "^7.3.1"
+  }
+}
