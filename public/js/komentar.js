@@ -13,7 +13,7 @@
   const API = '/api/komentar';
   const KUNCI_LOKAL = 'skpk-v2:komentar';
   const VERSI = document.documentElement.dataset.versi || 'lokal';
-  const STATUS = { baru: 'Baru', dikerjakan: 'Sedang diperbaiki', selesai: 'Selesai', ditolak: 'Tidak dikerjakan' };
+  const STATUS = { baru: 'New', dikerjakan: 'In progress', selesai: 'Done', ditolak: "Won't do" };
 
   const simpan = {
     baca(k, awal) { try { const v = localStorage.getItem(k); return v == null ? awal : JSON.parse(v); } catch { return awal; } },
@@ -40,7 +40,7 @@
     const jenis = r.headers.get('content-type') || '';
     if (!jenis.includes('application/json')) { const e = new Error('API komentar tidak tersedia'); e.tanpaApi = true; throw e; }
     const data = await r.json();
-    if (!r.ok) throw new Error(data.galat || 'Permintaan gagal (' + r.status + ')');
+    if (!r.ok) throw new Error(data.galat || 'Request failed (' + r.status + ')');
     return data;
   }
   // mode lokal hanya di komputer sendiri (npm run dev); di situs online komentar wajib ke server supaya tidak diam-diam
@@ -54,9 +54,9 @@
       st.pesan = '';
       await pindahkanLokal();
     } catch (e) {
-      if (e.tanpaApi && DI_KOMPUTER) { st.mode = 'lokal'; st.pesan = 'Mode lokal: server komentar tidak ada, komentar hanya tersimpan di peramban ini.'; st.data = lokal.semua(); }
-      else if (e.tanpaApi) { st.mode = 'galat'; st.pesan = 'Komentar belum bisa disimpan: server komentar (/api/komentar) tidak ada di situs ini. Hubungi pengelola situs.'; st.data = []; }
-      else { st.mode = 'galat'; st.pesan = 'Komentar belum bisa disimpan. Server komentar bermasalah: ' + e.message; st.data = []; }
+      if (e.tanpaApi && DI_KOMPUTER) { st.mode = 'lokal'; st.pesan = 'Local mode: no comment server, comments are saved in this browser only.'; st.data = lokal.semua(); }
+      else if (e.tanpaApi) { st.mode = 'galat'; st.pesan = 'Comments cannot be saved: the comment server (/api/komentar) is not available on this site.'; st.data = []; }
+      else { st.mode = 'galat'; st.pesan = 'Comments cannot be saved. Comment server error: ' + e.message; st.data = []; }
     }
   }
   // komentar yang dulu tersimpan di peramban ini (versi lama / sebelum server siap) dikirim ke server sekali, lalu dihapus dari peramban
@@ -116,7 +116,6 @@
     .kmt-fab .kmt-jml { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; border-radius: 10px; background: #e5342a; color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; padding: 0 5px; }
     body.kmt-mode, body.kmt-mode * { cursor: crosshair !important; }
     body.kmt-mode .kmt-ui, body.kmt-mode .kmt-ui * { cursor: auto !important; }
-    .kmt-pita { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 901; background: #1f2937; color: #fff; font-size: 12px; padding: 8px 14px; border-radius: 8px; box-shadow: 0 6px 16px rgba(0,0,0,.25); }
     .kmt-lapis { position: fixed; inset: 0; pointer-events: none; z-index: 880; }
     .kmt-pin { position: fixed; pointer-events: auto; width: 26px; height: 26px; margin: -26px 0 0 -4px; border-radius: 13px 13px 13px 2px; background: #f5b100; color: #1f2937; font-size: 11px; font-weight: 800; display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 3px 8px rgba(0,0,0,.3); cursor: pointer; }
     .kmt-pin.selesai { background: #2e9e5b; color: #fff; }
@@ -163,19 +162,17 @@
   // ---------- kerangka lapisan ----------
   const fab = document.createElement('div');
   fab.className = 'kmt-fab kmt-ui';
-  fab.innerHTML = `<button type="button" data-k="mode" title="Tambah komentar: klik bagian halaman yang ingin dikomentari" aria-label="Mode komentar">${IKON.komentar}</button>
-    <button type="button" data-k="panel" title="Daftar komentar" aria-label="Daftar komentar">${IKON.daftar}<span class="kmt-jml" style="display:none"></span></button>`;
+  fab.innerHTML = `<button type="button" data-k="mode" title="Comment" aria-label="Comment">${IKON.komentar}</button>
+    <button type="button" data-k="panel" title="Comments" aria-label="Comments">${IKON.daftar}<span class="kmt-jml" style="display:none"></span></button>`;
   const lapis = document.createElement('div');
   lapis.className = 'kmt-lapis kmt-ui';
   document.body.append(lapis, fab);
-  let pita = null, kotak = null, panel = null;
+  let kotak = null, panel = null;
 
   function aturMode(aktif) {
     st.aktif = aktif;
     document.body.classList.toggle('kmt-mode', aktif);
     fab.querySelector('[data-k=mode]').classList.toggle('aktif', aktif);
-    if (aktif && !pita) { pita = document.createElement('div'); pita.className = 'kmt-pita kmt-ui'; pita.textContent = 'Mode komentar: klik bagian yang ingin dikomentari. Esc untuk keluar.'; document.body.appendChild(pita); }
-    if (!aktif && pita) { pita.remove(); pita = null; }
   }
   const tutupKotak = () => { if (kotak) { kotak.remove(); kotak = null; } };
 
@@ -261,7 +258,7 @@
       const pin = induk().filter(k => k.halaman === hal).map(k => ({ k, p: posisi(jangkarDari(k)) })).filter(x => x.p);
       lapis.style.display = '';
       lapis.innerHTML = pin.map(({ k, p }) => `<div class="kmt-pin ${esc(k.status)}${p.geser ? ' geser' : ''}" data-id="${k.id}" style="left:${p.x}px;top:${p.y}px"
-        title="${esc('#' + k.id + ' ' + k.nama + ': ' + k.teks.slice(0, 80) + (p.geser ? ' (posisi asli berubah)' : ''))}">${k.id}</div>`).join('');
+        title="${esc('#' + k.id + ' ' + k.nama + ': ' + k.teks.slice(0, 80) + (p.geser ? ' (original position changed)' : ''))}">${k.id}</div>`).join('');
       const jml = induk().filter(k => k.status !== 'selesai' && k.status !== 'ditolak').length;
       const b = fab.querySelector('.kmt-jml');
       // tanda seru = komentar tidak bisa disimpan (server bermasalah); buka daftar untuk pesannya
@@ -275,13 +272,13 @@
     tutupKotak();
     kotak = document.createElement('div');
     kotak.className = 'kmt-kotak kmt-ui';
-    kotak.innerHTML = `<header><span>Komentar baru</span><button class="kmt-x" data-k="tutup" aria-label="Tutup">×</button></header>
+    kotak.innerHTML = `<header><span>New comment</span><button class="kmt-x" data-k="tutup" aria-label="Close">×</button></header>
       <div class="kmt-isi">
         ${st.pesan ? `<div class="kmt-pesan">${esc(st.pesan)}</div>` : ''}
-        <div class="kmt-meta">Pada: <b>${esc(jangkar.teks || jangkar.judul || '-')}</b></div>
-        <input data-k="nama" placeholder="Nama Anda" maxlength="80" value="${esc(namaSaya())}">
-        <textarea data-k="teks" placeholder="Tulis masukan atau permintaan perbaikan..." maxlength="4000"></textarea>
-        <div class="kmt-tombol"><button data-k="tutup">Batal</button><button class="utama" data-k="kirim" disabled>Simpan</button></div>
+        <div class="kmt-meta">On: <b>${esc(jangkar.teks || jangkar.judul || '-')}</b></div>
+        <input data-k="nama" placeholder="Your name" maxlength="80" value="${esc(namaSaya())}">
+        <textarea data-k="teks" placeholder="Write feedback or a change request..." maxlength="4000"></textarea>
+        <div class="kmt-tombol"><button data-k="tutup">Cancel</button><button class="utama" data-k="kirim" disabled>Save</button></div>
       </div>`;
     document.body.appendChild(kotak);
     taruh(kotak, x, y);
@@ -303,7 +300,7 @@
         gambarPin();
         gambarPanel();
         bukaUtas(baru.id);
-      } catch (err) { alert('Komentar gagal disimpan: ' + err.message); cek(); }
+      } catch (err) { alert('Comment could not be saved: ' + err.message); cek(); }
     });
   }
 
@@ -313,19 +310,19 @@
     if (!k) return;
     tutupKotak();
     const item = (z, balas) => `<div class="kmt-item${balas ? ' balas' : ''}">
-        <div class="kmt-meta"><b>${esc(z.nama)}</b><span>${esc(waktu(z.dibuat))}</span>${z.versi ? `<span title="Versi situs saat komentar dibuat">v${esc(z.versi)}</span>` : ''}
-          ${z.penulis === penulis ? `<button class="kmt-x" style="font-size:12px;margin-left:auto" data-hapus="${z.id}" title="Hapus komentar saya">Hapus</button>` : ''}</div>
+        <div class="kmt-meta"><b>${esc(z.nama)}</b><span>${esc(waktu(z.dibuat))}</span>${z.versi ? `<span title="Site version when the comment was made">v${esc(z.versi)}</span>` : ''}
+          ${z.penulis === penulis ? `<button class="kmt-x" style="font-size:12px;margin-left:auto" data-hapus="${z.id}" title="Delete my comment">Delete</button>` : ''}</div>
         <div class="kmt-teks">${esc(z.teks)}</div></div>`;
     kotak = document.createElement('div');
     kotak.className = 'kmt-kotak kmt-ui';
-    kotak.innerHTML = `<header><span>#${k.id} · ${esc(jangkarDari(k).judul || k.halaman)}</span><button class="kmt-x" data-k="tutup" aria-label="Tutup">×</button></header>
+    kotak.innerHTML = `<header><span>#${k.id} · ${esc(jangkarDari(k).judul || k.halaman)}</span><button class="kmt-x" data-k="tutup" aria-label="Close">×</button></header>
       <div class="kmt-isi">
         ${item(k)}${balasan(k.id).map(z => item(z, true)).join('')}
         <label class="kmt-meta">Status <select data-k="status">${Object.entries(STATUS).map(([v, l]) => `<option value="${v}" ${v === k.status ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         ${k.status_oleh ? `<div class="kmt-meta">Status diubah oleh ${esc(k.status_oleh)} ${esc(waktu(k.diubah))}</div>` : ''}
-        <input data-k="nama" placeholder="Nama Anda" maxlength="80" value="${esc(namaSaya())}">
-        <textarea data-k="teks" placeholder="Balas..." maxlength="4000"></textarea>
-        <div class="kmt-tombol"><button class="utama" data-k="balas" disabled>Balas</button></div>
+        <input data-k="nama" placeholder="Your name" maxlength="80" value="${esc(namaSaya())}">
+        <textarea data-k="teks" placeholder="Reply..." maxlength="4000"></textarea>
+        <div class="kmt-tombol"><button class="utama" data-k="balas" disabled>Reply</button></div>
       </div>`;
     document.body.appendChild(kotak);
     const pin = lapis.querySelector(`[data-id="${id}"]`);
@@ -334,13 +331,13 @@
     const nama = kotak.querySelector('[data-k=nama]'), teks = kotak.querySelector('[data-k=teks]'), tombol = kotak.querySelector('[data-k=balas]');
     kotak.addEventListener('input', () => { tombol.disabled = st.mode === 'galat' || !nama.value.trim() || !teks.value.trim(); });
     kotak.querySelector('[data-k=status]').addEventListener('change', async e => {
-      try { await ubahStatus(id, e.target.value); gambarPin(); gambarPanel(); } catch (err) { alert('Status gagal diubah: ' + err.message); }
+      try { await ubahStatus(id, e.target.value); gambarPin(); gambarPanel(); } catch (err) { alert('Status could not be changed: ' + err.message); }
     });
     kotak.addEventListener('click', async e => {
       const h = e.target.closest('[data-hapus]');
       if (h) {
-        if (!confirm('Hapus komentar ini' + (Number(h.dataset.hapus) === id ? ' beserta balasannya' : '') + '?')) return;
-        try { await hapus(Number(h.dataset.hapus)); } catch (err) { return alert('Gagal menghapus: ' + err.message); }
+        if (!confirm('Delete this comment' + (Number(h.dataset.hapus) === id ? ' and its replies' : '') + '?')) return;
+        try { await hapus(Number(h.dataset.hapus)); } catch (err) { return alert('Delete failed: ' + err.message); }
         gambarPin(); gambarPanel();
         return Number(h.dataset.hapus) === id ? tutupKotak() : bukaUtas(id);
       }
@@ -354,7 +351,7 @@
         await tambah({ induk: id, halaman: k.halaman, jangkar: null, teks: teks.value.trim(), nama: nama.value.trim(), penulis, versi: VERSI });
         gambarPanel();
         bukaUtas(id);
-      } catch (err) { alert('Balasan gagal disimpan: ' + err.message); tombol.disabled = false; }
+      } catch (err) { alert('Reply could not be saved: ' + err.message); tombol.disabled = false; }
     });
   }
 
@@ -376,20 +373,20 @@
     }
     const hal = halamanIni();
     const daftar = induk().filter(k => (st.filter.lingkup === 'semua' || k.halaman === hal) && (!st.filter.status || k.status === st.filter.status)).reverse();
-    panel.innerHTML = `<header><span>Komentar (${induk().length})</span><button class="kmt-x" data-k="tutup" aria-label="Tutup">×</button></header>
+    panel.innerHTML = `<header><span>Comments (${induk().length})</span><button class="kmt-x" data-k="tutup" aria-label="Close">×</button></header>
       <div class="kmt-saring">
-        <select data-f="lingkup" aria-label="Halaman"><option value="ini" ${st.filter.lingkup === 'ini' ? 'selected' : ''}>Halaman ini</option><option value="semua" ${st.filter.lingkup === 'semua' ? 'selected' : ''}>Semua halaman</option></select>
-        <select data-f="status" aria-label="Status"><option value="">Semua status</option>${Object.entries(STATUS).map(([v, l]) => `<option value="${v}" ${v === st.filter.status ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <select data-f="lingkup" aria-label="Page"><option value="ini" ${st.filter.lingkup === 'ini' ? 'selected' : ''}>This page</option><option value="semua" ${st.filter.lingkup === 'semua' ? 'selected' : ''}>All pages</option></select>
+        <select data-f="status" aria-label="Status"><option value="">All statuses</option>${Object.entries(STATUS).map(([v, l]) => `<option value="${v}" ${v === st.filter.status ? 'selected' : ''}>${l}</option>`).join('')}</select>
       </div>
       <div class="kmt-daftar">${st.pesan ? `<div class="kmt-pesan">${esc(st.pesan)}</div>` : ''}
         ${daftar.length ? daftar.map(k => `<div class="kmt-item" data-id="${k.id}">
           <div class="kmt-meta"><b>#${k.id} ${esc(k.nama)}</b><span>${esc(waktu(k.dibuat))}</span><span class="kmt-chip ${esc(k.status)}">${STATUS[k.status] || esc(k.status)}</span></div>
           <div class="kmt-meta">${esc(jangkarDari(k).judul || k.halaman)}${jangkarDari(k).teks ? ' · ' + esc(jangkarDari(k).teks.slice(0, 40)) : ''}</div>
           <div class="kmt-teks">${esc(k.teks.length > 200 ? k.teks.slice(0, 200) + '…' : k.teks)}</div>
-          ${balasan(k.id).length ? `<div class="kmt-meta" style="margin-top:4px">${balasan(k.id).length} balasan</div>` : ''}</div>`).join('') : '<div class="kmt-kosong">Belum ada komentar. Klik tombol komentar di kanan bawah, lalu klik bagian halaman.</div>'}
+          ${balasan(k.id).length ? `<div class="kmt-meta" style="margin-top:4px">${balasan(k.id).length} replies</div>` : ''}</div>`).join('') : '<div class="kmt-kosong">No comments</div>'}
       </div>
-      <div class="kmt-kaki"><span>${st.mode === 'server' ? 'Tersimpan di server' : st.mode === 'lokal' ? 'Tersimpan di peramban ini' : ''}</span>
-        <span style="display:flex;gap:8px"><button class="kmt-btn" data-k="segar">Muat ulang</button><button class="kmt-btn utama" data-k="unduh">Unduh CSV</button></span></div>`;
+      <div class="kmt-kaki"><span>${st.mode === 'server' ? 'Saved on server' : st.mode === 'lokal' ? 'Saved in this browser' : ''}</span>
+        <span style="display:flex;gap:8px"><button class="kmt-btn" data-k="segar">Reload</button><button class="kmt-btn utama" data-k="unduh">Download CSV</button></span></div>`;
   }
 
   // buka halaman komentar lalu tampilkan utasnya

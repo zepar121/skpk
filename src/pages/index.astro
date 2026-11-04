@@ -14,55 +14,56 @@ const versi = (process.env.WORKERS_CI_COMMIT_SHA || process.env.CF_PAGES_COMMIT_
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-<title>Ceisa 4.0</title>
+<title>Browse · SKPK</title>
 </head>
 <body>
 <div class="app" id="app">
   <aside class="sidebar" id="sidebar">
     <div class="sb-kepala">
-      <a class="logo" href="#/smart-pcc/browse-pib" aria-label="Beranda">
+      <a class="logo" href="#/smart-pcc/browse-pib" aria-label="Home">
         <svg viewBox="0 0 40 34" width="34" height="30" aria-hidden="true">
           <circle cx="12" cy="6" r="3.2" fill="#e5342a"/><circle cx="21" cy="4" r="3.2" fill="#1f9d55"/><circle cx="29" cy="8" r="3.2" fill="#1d6fc9"/>
           <path d="M4 20c6-8 14-9 22-6M9 28c5-9 13-11 21-8" stroke="#1d3f7a" stroke-width="3" fill="none" stroke-linecap="round"/>
         </svg>
         <span class="logo-teks">ceisa<small>Enriched | Integrated | Automated</small></span>
       </a>
-      <button class="sb-ciut" id="btnCiut" aria-label="Ciutkan menu" title="Ciutkan menu">«</button>
+      <button class="sb-ciut" id="btnCiut" aria-label="Collapse menu" title="Collapse menu">«</button>
     </div>
     <div class="sb-cari">
       <span class="ik" data-ikon="cari"></span>
-      <input id="cariMenu" value="skpk" placeholder="Cari menu" aria-label="Cari menu">
-      <button id="hapusCari" class="sb-hapus" aria-label="Hapus pencarian">×</button>
+      <input id="cariMenu" value="skpk" placeholder="Search menu" aria-label="Search menu">
+      <button id="hapusCari" class="sb-hapus" aria-label="Clear search">×</button>
     </div>
     <nav class="sb-nav" id="sbNav">
       <div class="sb-grup">SMART CUSTOMS</div>
-      <div class="sb-menu buka" data-cari="smart pcc skpk browse pib profil komoditas">
+      <div class="sb-menu buka" data-cari="smart pcc skpk sistem komputer penelitian kembali browse basket">
         <button class="sb-induk aktif" id="sbPcc"><span class="ik" data-ikon="menu-pcc"></span><span class="sb-label">SMART PCC</span><span class="sb-panah">⌄</span></button>
         <div class="sb-anak">
-          <button class="sb-sub" id="sbSkpk"><span class="sb-label">Sistem Komputer Profil Komoditas (SKPK)</span><span class="sb-panah">⌄</span></button>
+          <button class="sb-sub" id="sbSkpk"><span class="sb-label">Sistem Komputer Penelitian Kembali (SKPK)</span><span class="sb-panah">⌄</span></button>
           <div class="sb-daun">
-            <a href="#/smart-pcc/browse-pib" data-menu="browse-pib">Browse PIB</a>
-            <a href="#/smart-pcc/penelitian-skpk" data-menu="penelitian-skpk">Profil Komoditas</a>
+            <a href="#/smart-pcc/browse-pib" data-menu="browse-pib">Browse</a>
+            <a href="#/smart-pcc/penelitian-skpk" data-menu="penelitian-skpk">Basket</a>
           </div>
         </div>
       </div>
     </nav>
     <div class="sb-ikon-saja">
-      <button class="sb-ciut" id="btnLebar" aria-label="Lebarkan menu" title="Lebarkan menu">»</button>
+      <button class="sb-ciut" id="btnLebar" aria-label="Expand menu" title="Expand menu">»</button>
       <span class="sb-titik">…</span>
-      <a href="#/smart-pcc/browse-pib" class="sb-ikon aktif" title="Smart PCC"><span class="ik" data-ikon="menu-pcc"></span></a>
+      <a href="#/smart-pcc/browse-pib" class="sb-ikon aktif" data-menu="browse-pib" title="Browse" aria-label="Browse"><span class="ik" data-ikon="cari"></span></a>
+      <a href="#/smart-pcc/penelitian-skpk" class="sb-ikon" data-menu="penelitian-skpk" title="Basket" aria-label="Basket"><span class="ik" data-ikon="keranjang"></span></a>
     </div>
   </aside>
   <div class="utama">
     <header class="topbar">
       <div class="tb-kanan">
         <span class="token">Token Expired : <b id="token">11:54:01</b></span>
-        <span class="ik ik-ai" data-ikon="ai" title="Asisten"></span>
+        <span class="ik ik-ai" data-ikon="ai" title="Assistant"></span>
         <span class="hi">Hi,</span>
-        <span class="avatar" title="Pengguna">AB</span>
+        <span class="avatar" title="User">AB</span>
       </div>
     </header>
-    <div class="judul-hal"><h1 id="judulHal">BROWSE DATA PIB</h1></div>
+    <div class="judul-hal"><h1 id="judulHal">BROWSE</h1></div>
     <main id="view" tabindex="-1"></main>
     <footer class="kaki">2019 © Direktorat Jenderal Bea dan Cukai &nbsp; <span>Digital Signature Supported by BSrE</span> <span class="bsre">◉</span></footer>
   </div>
@@ -80,8 +81,10 @@ const versi = (process.env.WORKERS_CI_COMMIT_SHA || process.env.CF_PAGES_COMMIT_
 <script is:inline src="/js/mesin/ekspor.js"></script>
 <script is:inline src="/js/data.js"></script>
 <script is:inline src="/js/basket.js"></script>
+<script is:inline src="/js/lampiran.js"></script>
 <script is:inline src="/js/tabel.js"></script>
 <script is:inline src="/js/app.js"></script>
+<script is:inline src="/js/tip.js"></script>
 <!-- lapisan komentar pengguna (bukan bagian desain CEISA); disimpan di /api/komentar -->
 <script is:inline src="/js/komentar.js"></script>
 </body>

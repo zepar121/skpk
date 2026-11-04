@@ -14,4 +14,4 @@ If Not running Then
   sh.Run "cmd /c npm run dev >> dev-server.log 2>&1", 0, False
   WScript.Sleep 6000
 End If
-sh.Run "http://127.0.0.1:4332/"
+sh.Run "http://localhost:4332/"

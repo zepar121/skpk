@@ -9,6 +9,12 @@
   'use strict';
 
   const S = root.SKPK_SUMBER;
+  // kolom inti dibaca lewat peran (dokumen.js): nama kolom Excel tiap jenis dokumen berbeda (Nm Imp / Nama Eksportir, ...)
+  const DOK = root.SKPK_DOKUMEN.PROFIL[root.SKPK_DOKUMEN.AKTIF] || root.SKPK_DOKUMEN.PROFIL.bc20;
+  // peran yang belum ada di profil To-Be
+  const PERAN_TAMBAHAN = { bc20: { tipe: 'Type', merk: 'Merek', satuan: 'Kd Sat Hrg' }, bc30: { tipe: 'Tipe Barang', merk: 'Merk', satuan: 'Jenis Satuan' } };
+  const PERAN = { ...DOK.peran, ...(PERAN_TAMBAHAN[DOK.kode] || {}) };
+  const ambil = (m, peran) => (PERAN[peran] ? m[PERAN[peran]] : null);
   const M = root.SKPK_DATA;
   const R = root.SkpkRiwayat;
 
@@ -67,16 +73,17 @@
   const HARI_INI = new Date('2026-11-02');
   const umur = s => (s ? Math.max(0, Math.round((HARI_INI - new Date(s)) / 86400000)) : null);
 
-  const TEMA = ['Inkonsistensi HS Code', 'Undervaluasi Nilai Pabean', 'Penyalahgunaan Fasilitas FTA', 'Perluasan Penetapan', 'Profil Importir Berisiko'];
+  const TEMA = ['HS Code Inconsistency', 'Customs Value Undervaluation', 'FTA Facility Misuse', 'Assessment Expansion', 'High-Risk Importer Profile'];
 
   // ---------- baris tampilan ----------
   const ROWS = MENTAH.map((m, id) => {
-    const kunciBaris = (m['No Aju'] || '') + '|' + m['Seri Brg'];
+    const kunciBaris = (ambil(m, 'aju') || '') + '|' + ambil(m, 'seri');
     const h = k => hash(kunciBaris + '|' + k);
     const mesin = MESIN.get(kunciBaris) || {};
-    const skepKode = m['Kd Skep Fas'] && !/^0+$/.test(m['Kd Skep Fas']) ? m['Kd Skep Fas'] : null;
+    const fas = ambil(m, 'fasilitas');
+    const skepKode = fas && !/^0+$/.test(fas) ? fas : null;
     const skepUtama = skepKode ? skepKode.split(',')[0].trim() : null;
-    const hs = m['Hs Code'];
+    const hs = ambil(m, 'hs');
 
     // RE Inkonsistensi: uraian sama memakai HS lain dengan tarif lebih rendah (LOWER DUTY) atau HS lain (MISMATCH)
     const ref = mesin.hsRef;
@@ -96,10 +103,10 @@
       inkonsistensi,
       reassessment: h('ra') < 0.1,
       ska: !!skepKode && h('ska') < 0.06,
-      audit: m['Fl Audit'] === 'Y'
+      audit: ambil(m, 'audit') === 'Y'
     };
     flag.multi = [flag.p2, flag.analisis, flag.perluasan, flag.inkonsistensi, flag.reassessment].filter(Boolean).length >= 2;
-    const jalur = m['Status Jalur'] || '';
+    const jalur = ambil(m, 'jalur') || '';
     return {
       id,
       m,
@@ -109,48 +116,50 @@
       kodeFasNama: skepKode ? skepKode.split(',').map(k => k.trim() + ' - ' + (SKEP[k.trim()] || 'FASILITAS ' + k.trim())).join('; ') : null,
       hargaSatuan: mesin.price_per_unit == null ? null : mesin.price_per_unit,
       perluasan,
-      ketInkonsistensi: inkonsistensi ? `[Uraian sama di ${ref.total} seri memakai ${ref.jumlahHs} HS; HS acuan ${fmtHs(ref.hs)} (${ref.n} seri, tarif ${ref.tarif == null ? '-' : ref.tarif + '%'}), HS diberitahukan ${fmtHs(hs)} tarif ${m['Trf Bm']}%${mesin.hs_flag === 'LOWER DUTY' ? ', lebih rendah dari acuan' : ''}]` : null,
+      ketInkonsistensi: inkonsistensi ? `[Same description in ${ref.total} series under ${ref.jumlahHs} HS codes; reference HS ${fmtHs(ref.hs)} (${ref.n} series, rate ${ref.tarif == null ? '-' : ref.tarif + '%'}), declared HS ${fmtHs(hs)} rate ${ambil(m, 'tarif')}%${mesin.hs_flag === 'LOWER DUTY' ? ', lower than reference' : ''}]` : null,
       penetapan,
       penetapanTeks: penetapan.length ? Array.from(new Set(penetapan.map(p => p.jenis + ' ' + p.ref))).join(', ') : null,
       terkunci: !!mesin.assessed,
-      uraian: m['Ur Brg'],
-      tipe: m['Type'],
-      merk: m['Merek'],
+      dokumen: DOK.label,
+      uraian: ambil(m, 'uraian'),
+      tipe: ambil(m, 'tipe'),
+      merk: ambil(m, 'merk'),
       hs,
       hsSaran,
-      trfBm: m['Trf Bm'],
+      trfBm: ambil(m, 'tarif'),
       trfSaran,
       skep: skepKode ? skepUtama + ' - ' + (SKEP[skepUtama] || 'FASILITAS ' + skepUtama) : null,
       skepKode: skepUtama,
-      perusahaan: m['Nm Imp'],
-      npwp: m['Npwp Imp'],
-      kantorKode: m['Kd Kantor'],
-      kantor: m['Kd Kantor'] ? m['Kd Kantor'] + ' - ' + (KANTOR[m['Kd Kantor']] || 'KPPBC ' + m['Kd Kantor']) : null,
+      perusahaan: ambil(m, 'pelaku'),
+      npwp: ambil(m, 'npwp'),
+      kantorKode: ambil(m, 'kantor'),
+      kantor: ambil(m, 'kantor') ? ambil(m, 'kantor') + ' - ' + (KANTOR[ambil(m, 'kantor')] || 'KPPBC ' + ambil(m, 'kantor')) : null,
       kanwil: null,
-      noPib: m['No Pib'],
-      aju: m['No Aju'],
-      tglDaftar: m['Tgl Pib'],
+      noPib: ambil(m, 'nomor'),
+      aju: ambil(m, 'aju'),
+      tglDaftar: ambil(m, 'tanggal'),
+      // kolom khusus BC 2.0 (nama Excel apa adanya); kosong di jenis dokumen lain
       waktuRekam: m['Tgl Aju'],
       pemasok: m['Nm Pemasok'],
-      seri: m['Seri Brg'],
-      satuan: m['Kd Sat Hrg'],
-      jmlSatuan: m['Jml Sat Hrg'],
       bmBayar: m['Bmby'],
-      negara: m['Neg Asal'],
-      negaraNama: m['Neg Asal'] ? m['Neg Asal'] + ' - ' + (NEGARA[m['Neg Asal']] || m['Neg Asal']) : null,
-      devisa: m['Nilai Devisa Idr'],
+      seri: ambil(m, 'seri'),
+      satuan: ambil(m, 'satuan'),
+      jmlSatuan: ambil(m, 'jumlah'),
+      negara: ambil(m, 'negara'),
+      negaraNama: ambil(m, 'negara') ? ambil(m, 'negara') + ' - ' + (NEGARA[ambil(m, 'negara')] || ambil(m, 'negara')) : null,
+      devisa: ambil(m, 'nilai'),
       jalurKode: jalur,
       jalur: jalur ? jalur + ' - ' + (JALUR[jalur[0]] || jalur) : null,
       tema: flag.analisis ? TEMA[Math.floor(h('tema') * TEMA.length)] : null,
-      umur: umur(m['Tgl Pib']),
+      umur: umur(ambil(m, 'tanggal')),
       flag,
       ketPerluasan: flag.perluasan ? [mesin.expansion_ref, mesin.notul_expansion].filter(Boolean).map(s => '[' + s + ']').join(' ') +
-        (exp ? ` [Kemiripan uraian ${Math.round(exp.skor * 100)}% dengan temuan ${R.labelBatch(exp.batch)}, HS ${fmtHs(exp.baris.hsAsal)} ditetapkan ${fmtHs(exp.baris.hsTetap)}]` : '') : null,
+        (exp ? ` [Description ${Math.round(exp.skor * 100)}% similar to finding ${R.labelBatch(exp.batch)}, HS ${fmtHs(exp.baris.hsAsal)} assessed as ${fmtHs(exp.baris.hsTetap)}]` : '') : null,
       ketDnda: null,
       ketAudit: flag.audit ? m['Ur Audit'] : null,
       ketPenul: mesin.penulRef ? R.labelBatch(mesin.penulRef.batch) + ' → ' + fmtHs(mesin.penulRef.baris.hsTetap) : null,
       ketNotul: mesin.notul ? 'SPTNP ' + penetapan.filter(p => p.jenis === 'SPTNP').map(p => p.ref).join(', ') + ' (' + mesin.notul + ')' : null,
-      ketSka: flag.ska ? 'SKA form ' + (skepUtama === '54' ? 'E' : skepUtama === '52' ? 'D' : 'AK') + ' tidak sesuai kriteria asal barang' : null
+      ketSka: flag.ska ? 'SKA form ' + (skepUtama === '54' ? 'E' : skepUtama === '52' ? 'D' : 'AK') + ' does not meet the origin criteria' : null
     };
   });
 
@@ -168,7 +177,7 @@
     return best;
   };
   const statistik = rows => ({
-    entitas: new Set(rows.map(r => r.npwp)).size,
+    entitas: new Set(rows.map(r => r.m['Npwp9'])).size,
     pib: new Set(rows.map(r => r.aju)).size,
     seri: rows.length,
     kantor: new Set(rows.map(r => r.kantorKode)).size,
@@ -181,7 +190,7 @@
   // ---------- data history penelitian: batch audit, penul, notul dari riwayat mesin ----------
   // periode audit belum ada di batch; dibangkitkan dari tahun PIB seperti versi As-Is
   const PER_KUNCI = new Map(ROWS.map(r => [r.kunci, r]));
-  const NAMA_JENIS = { audit: 'Audit Umum', penul: 'Penelitian Ulang', notul: 'Notul (SPTNP)' };
+  const NAMA_JENIS = { audit: 'General Audit', penul: 'Re-examination', notul: 'Notul (SPTNP)' };
   const HISTORY = [];
   for (const b of R.semua()) {
     for (const x of b.baris) {
@@ -193,9 +202,9 @@
         id: HISTORY.length, no: HISTORY.length + 1, jenis: NAMA_JENIS[b.jenis], npwp: r ? r.npwp : x.npwp9 || null,
         st: b.jenis === 'notul' ? R.refBaris(b, x) : b.noSt || R.refBaris(b, x),
         awal: b.jenis === 'notul' ? null : tahun + '-02-01', akhir: b.jenis === 'notul' ? null : (tahun + 1) + '-10-31',
-        dokumen: 'BC 2.0', kantor: r ? r.kantor : k.kantor || null, noDaftar: k.noPib || (r && r.noPib), tglDaftar: k.tglPib || (r && r.tglDaftar), seri: k.seri,
-        temuan: `${PENETAPAN[b.jenis]} ${R.refBaris(b, x)}: HS ${fmtHs(x.hsAsal) || '-'} ditetapkan ${fmtHs(x.hsTetap) || '-'}` +
-          (x.tarifTetap == null ? '' : `, tarif BM ${x.tarifTetap}%`) + (x.ket ? '. ' + x.ket : ''),
+        dokumen: DOK.label, kantor: r ? r.kantor : k.kantor || null, noDaftar: k.noPib || (r && r.noPib), tglDaftar: k.tglPib || (r && r.tglDaftar), seri: k.seri,
+        temuan: `${PENETAPAN[b.jenis]} ${R.refBaris(b, x)}: HS ${fmtHs(x.hsAsal) || '-'} assessed as ${fmtHs(x.hsTetap) || '-'}` +
+          (x.tarifTetap == null ? '' : `, BM rate ${x.tarifTetap}%`) + (x.ket ? '. ' + x.ket : ''),
         rowId: r ? r.id : null
       });
     }
@@ -204,5 +213,5 @@
   const tanggal = ROWS.map(r => r.tglDaftar).filter(Boolean).sort();
   const PERIODE = { mulai: tanggal[0], akhir: tanggal[tanggal.length - 1] };
 
-  root.SKPK_ASLI = { ROWS, PER_ID, PER_KUNCI, HISTORY, PERIODE, TEMA, VALUTA, BAYAR, statistik, angka, rupiah, tgl, hash, fmtHs };
+  root.SKPK_ASLI = { DOK, PERAN, ROWS, PER_ID, PER_KUNCI, HISTORY, PERIODE, TEMA, VALUTA, BAYAR, statistik, angka, rupiah, tgl, hash, fmtHs };
 })(window);
