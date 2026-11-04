@@ -22,7 +22,7 @@
  *   setelahRender: total => {},
  *   kelasBaris: r => 'kelas',     // kelas tambahan per baris (mis. warna status)
  *   dobelKlik: r => {}            // dobel-klik baris = buka detail
- * }) -> { render, reset, terpilih, terfilter, kosongkanPilihan, keadaan, pulihkan, adaKeadaan, kolomTampil,
+ * }) -> { render, reset, terpilih, terfilter, kosongkanPilihan, lepasPilihan, keadaan, pulihkan, adaKeadaan, kolomTampil,
  *         bukaPilihKolom(jangkar), kolomDiubah, terhubung }
  */
 (function (root) {
@@ -1137,6 +1137,8 @@
       kolomDiubah: () => st.kolom.join() !== bawaanKolom().join(),
       bukaPilihKolom,
       kosongkanPilihan() { st.pilih.clear(); render(); },
+      // lepas centang baris yang memenuhi fn(id), mis. baris yang baru disembunyikan saringan luar
+      lepasPilihan(fn) { let n = 0; for (const id of st.pilih) if (fn(id)) { st.pilih.delete(id); n++; } if (n) render(); return n; },
       reset() { st.saring = {}; st.hal = 1; st.urut = []; render(true); }
     };
     return api;

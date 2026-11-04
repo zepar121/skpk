@@ -4,7 +4,8 @@
  * Alur: analis junior mengajukan seri (satu pengajuan = satu nomor SUB-...) -> analis senior menyetujui, mengembalikan
  * (seri kembali ke basket dengan catatan), atau menolak -> analis senior mengirim ke SIRENA (nomor SRN-...). Alur berhenti di SIRENA.
  * Warna baris (Browse dan Basket): putih = belum di basket, kuning = di basket (termasuk dikembalikan / ditolak),
- * hijau = sudah diproses dari basket (Submit, Approved, SIRENA), merah = sudah ditetapkan (SPTNP / SPKTNP / LHA).
+ * hijau = sudah diproses dari basket (Submit, Approved, SIRENA), merah = sudah ditetapkan (SPTNP / SPKTNP / LHA) dan belum di basket.
+ * Seri yang sudah ditetapkan tetap boleh masuk basket (penetapan ulang); Browse memberi peringatan sebelum menurunkannya.
  * Peran (junior / senior / admin) menggantikan login: dipilih di avatar topbar.
  * Seri yang sudah ada di basket unit lain terkunci (tidak bisa diambil dua kali) dan tetap terlihat setelah masuk SIRENA.
  * Disimpan di localStorage peramban (skpk-v2:basket, skpk-v2:pengajuan, skpk-v2:peran, skpk-v2:notif-baca).
@@ -74,27 +75,51 @@
     return c ? { ...c, milikSaya: false } : null;
   }
   const label = s => (!s ? null : s.status === 'sirena' ? 'SIRENA ' + s.sirena.nomor : 'Basket - ' + s.pemilik);
-  // warna baris: merah | hijau | kuning | null (putih)
+  // seri yang sudah ditetapkan (notul / penul / audit: SPTNP / SPKTNP / LHA); masih boleh ditetapkan ulang (mis. 0% -> 5% -> 10%)
+  const ditetapkan = r => !!(r.terkunci || (r.penetapan && r.penetapan.length));
+  // sumber penetapan seri: notul (SPTNP) | penul (SPKTNP) | audit (LHA), dari riwayat dan kunci tarif mesin
+  function sumberTetap(r) {
+    const m = r.mesin || {};
+    return Array.from(new Set([...(m.riwayat || []), ...(m.terkunci || [])].map(x => x.batch && x.batch.jenis).filter(Boolean)));
+  }
+  // batas penelitian ulang: 2 tahun sejak tanggal dokumen, dihitung dari hari halaman dibuka
+  const HARI_INI = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })();
+  const HARI_PERINGATAN = 30;
+  function batasTanggal(r) {
+    if (!r.tglDaftar) return null;
+    const d = new Date(r.tglDaftar.slice(0, 10) + 'T00:00:00');
+    d.setFullYear(d.getFullYear() + 2);
+    return d;
+  }
+  // sisa hari sampai lewat 2 tahun (0 = hari terakhir, negatif = expired); null bila tanpa tanggal
+  const sisaHari = r => { const b = batasTanggal(r); return b ? Math.round((b - HARI_INI) / 86400000) : null; };
+  const kadaluarsa = r => { const n = sisaHari(r); return n != null && n < 0; };
+  // warna baris: merah (expired, belum di SIRENA) | hijau (Submit / Approved / SIRENA) | kuning (di basket) | abu (sudah ditetapkan) | null (putih)
   function warna(r) {
-    if (r.terkunci || (r.penetapan && r.penetapan.length)) return 'merah';
     const s = status(r);
-    if (!s) return null;
-    return s.status === 'ajukan' || s.status === 'sirena' ? 'hijau' : 'kuning';
+    if (s && s.status === 'sirena') return 'hijau';
+    if (kadaluarsa(r)) return 'merah';
+    if (s) return s.status === 'ajukan' ? 'hijau' : 'kuning';
+    return ditetapkan(r) ? 'abu' : null;
   }
   const baris = () => Object.keys(milik).map(k => D.PER_KUNCI.get(k)).filter(Boolean);
 
-  // turunkan baris dari Browse; seri yang sudah ditetapkan (cleansing) dan basket unit lain dilewati
-  function tambah(rows, tema, jenis, catatan) {
-    const hasil = { masuk: 0, sudah: 0, penetapan: 0, terkunci: 0 };
+  // turunkan baris dari Browse; basket unit lain dan basket sendiri dilewati. Seri yang sudah ditetapkan ikut masuk
+  // (penetapan ulang) kecuali opsi.lewatiDitetapkan; Browse memberi peringatan dulu sebelum memanggil ini.
+  function tambah(rows, tema, jenis, catatan, opsi = {}) {
+    const hasil = { masuk: 0, sudah: 0, penetapan: 0, terkunci: 0, ulang: 0, expired: 0 };
     const waktu = new Date().toISOString();
     for (const r of rows) {
       const s = status(r);
-      if (s && s.milikSaya) hasil.sudah++;
+      // lewat 2 tahun sejak tanggal dokumen: tidak bisa diteliti ulang, selalu ditolak
+      if (kadaluarsa(r)) hasil.expired++;
+      else if (s && s.milikSaya) hasil.sudah++;
       else if (s) hasil.terkunci++;
-      else if (r.terkunci) hasil.penetapan++;
+      else if (ditetapkan(r) && opsi.lewatiDitetapkan) hasil.penetapan++;
       else {
         milik[r.kunci] = { tema, jenis, catatan, waktu, oleh: peran, hs: null, bm: null, fasDitolak: false, alasan: '', status: 'basket', sirena: null };
         hasil.masuk++;
+        if (ditetapkan(r)) hasil.ulang++;
       }
     }
     if (hasil.masuk) tulis();
@@ -146,6 +171,41 @@
   const semuaIsian = () => Object.values(milik).concat(Array.from(CONTOH.values()));
   const daftarTema = (sendiri = false) => unik((sendiri ? Object.values(milik) : semuaIsian()).map(s => s.tema));
   const daftarJenis = () => unik(D.TEMA.concat(semuaIsian().map(s => s.jenis)));
+
+  // hapus tema milik sendiri: seri yang belum diproses (basket, dikembalikan, ditolak) keluar dari basket;
+  // seri yang sedang diajukan / sudah di SIRENA tetap. Hasil { hapus: { kunci: entri }, sisa } untuk Urungkan
+  function hapusTema(nama) {
+    const hapus = {};
+    let sisa = 0;
+    for (const [k, s] of Object.entries(milik)) {
+      if (s.tema !== nama) continue;
+      if (s.status === 'ajukan' || s.status === 'sirena') { sisa++; continue; }
+      hapus[k] = s;
+      delete milik[k];
+    }
+    if (Object.keys(hapus).length) tulis();
+    return { hapus, sisa };
+  }
+  // keluarkan seri tertentu dari basket (satu baris atau lebih dari sebuah tema); aturan sama dengan hapusTema
+  function keluarkan(rows) {
+    const hapus = {};
+    let sisa = 0;
+    for (const r of rows) {
+      const s = milik[r.kunci];
+      if (!s) continue;
+      if (s.status === 'ajukan' || s.status === 'sirena') { sisa++; continue; }
+      hapus[r.kunci] = s;
+      delete milik[r.kunci];
+    }
+    if (Object.keys(hapus).length) tulis();
+    return { hapus, sisa };
+  }
+  // tema milik sendiri yang masih punya seri belum diproses (ikon hapus hanya untuk tema ini)
+  const temaBisaHapus = () => new Set(Object.values(milik).filter(s => s.status !== 'ajukan' && s.status !== 'sirena').map(s => s.tema));
+  function pulihkanTema(hapus) {
+    for (const [k, s] of Object.entries(hapus || {})) if (!milik[k]) milik[k] = s;
+    tulis();
+  }
 
   // HS penetapan + tarif akhir untuk banyak baris sekaligus; hanya seri yang masih di basket (belum diajukan) yang berubah.
   // isi = { hs, bm, ppn, pph, lain: [{ jenis, tarif }], alasan }; tarif null = otomatis per seri (tarifOtomatis)
@@ -252,6 +312,29 @@
     return a;
   }
 
+  // urungkan Submit / Approve / Send to SIRENA terakhir (pengganti popup konfirmasi); hanya bila belum ada aksi sesudahnya
+  function urungkan(id) {
+    const a = aju[id];
+    const e = a && a.riwayat[a.riwayat.length - 1];
+    if (!e || e.oleh !== peran) return false;
+    const tiapSeri = fn => a.seri.forEach(x => { const s = milik[x.kunci]; if (s && s.pengajuan === id) fn(s); });
+    if (e.aksi === 'ajukan' && a.status === 'review') {
+      tiapSeri(s => Object.assign(s, { status: 'basket', pengajuan: null }));
+      delete aju[id];
+    } else if (e.aksi === 'setujui' && a.status === 'setuju') {
+      a.riwayat.pop();
+      a.status = 'review';
+    } else if (e.aksi === 'kirim' && a.status === 'sirena') {
+      a.riwayat.pop();
+      a.status = 'setuju';
+      a.sirena = null;
+      tiapSeri(s => Object.assign(s, { status: 'ajukan', sirena: null }));
+    } else return false;
+    tulis();
+    tulisAju();
+    return true;
+  }
+
   // ---------- pengajuan: ringkasan untuk tampilan ----------
   const daftarAju = () => Object.values(aju).sort((x, y) => waktuAkhir(y).localeCompare(waktuAkhir(x)));
   const waktuAkhir = a => (a.riwayat.length ? a.riwayat[a.riwayat.length - 1].waktu : a.waktu);
@@ -303,18 +386,40 @@
   const tugas = () => (boleh.tinjau() ? daftarAju().filter(a => a.status === 'review' || a.status === 'setuju') : []);
 
   // ---------- notifikasi ----------
-  // semua peristiwa pengajuan yang bukan aksi peran aktif sendiri, terbaru di atas; dibaca per peran
+  // hanya hal yang perlu ditindaklanjuti peran aktif (bukan log peristiwa); hilang sendiri setelah ditangani:
+  //   senior / admin: pengajuan menunggu Approve (review) dan menunggu Send to SIRENA (setuju)
+  //   junior / admin: pengajuan yang dikembalikan
+  //   penanggung jawab seri: seri basket yang tinggal <= HARI_PERINGATAN hari dari batas 2 tahun (atau sudah lewat), per tema
+  // "baru" = belum dibuka peran ini (penanda saja; angka lonceng = jumlah semua yang masih perlu ditindaklanjuti)
   let dibaca = bacaJson(KUNCI_BACA, {});
-  const idPeristiwa = (a, i) => a.id + '#' + i;
   function notifikasi() {
     const baca = new Set(dibaca[peran] || []);
+    const urus = { junior: peran !== 'senior', senior: peran !== 'junior' };
     const d = [];
-    for (const a of Object.values(aju)) a.riwayat.forEach((e, i) => {
-      if (e.oleh === peran) return;
-      const id = idPeristiwa(a, i);
-      d.push({ id, aju: a, ...e, baru: !baca.has(id) });
-    });
-    return d.sort((x, y) => y.waktu.localeCompare(x.waktu));
+    for (const a of Object.values(aju)) {
+      const e = a.riwayat[a.riwayat.length - 1];
+      const dasar = { id: a.id + '#' + a.riwayat.length, aju: a, tema: a.tema, waktu: e ? e.waktu : a.waktu, catatan: e ? e.catatan : '' };
+      if (urus.senior && a.status === 'review') d.push({ ...dasar, jenis: 'approve' });
+      else if (urus.senior && a.status === 'setuju') d.push({ ...dasar, jenis: 'sirena' });
+      else if (urus.junior && a.status === 'kembali') d.push({ ...dasar, jenis: 'kembali' });
+    }
+    const grup = new Map();
+    for (const [kunci, s] of Object.entries(milik)) {
+      if (s.status === 'sirena' || s.status === 'tolak') continue;
+      if (!(s.status === 'ajukan' ? urus.senior : urus.junior)) continue;
+      const r = D.PER_KUNCI.get(kunci);
+      const n = r ? sisaHari(r) : null;
+      if (n == null || n > HARI_PERINGATAN) continue;
+      const g = grup.get(s.tema) || { tema: s.tema, n: 0, sisa: Infinity };
+      g.n++;
+      g.sisa = Math.min(g.sisa, n);
+      grup.set(s.tema, g);
+    }
+    for (const g of grup.values()) d.push({ id: 'exp|' + g.tema + '|' + g.n + '|' + (g.sisa < 0 ? 'x' : 'w'), jenis: g.sisa < 0 ? 'expired' : 'expiring', ...g });
+    for (const x of d) x.baru = !baca.has(x.id);
+    // yang mendesak (expired / hampir expired) di atas, lalu yang paling lama menunggu
+    const urut = x => (x.jenis === 'expired' || x.jenis === 'expiring' ? 0 : 1);
+    return d.sort((x, y) => urut(x) - urut(y) || (urut(x) ? x.waktu.localeCompare(y.waktu) : x.sisa - y.sisa));
   }
   function tandaiBaca(ids) {
     const baca = new Set(dibaca[peran] || []);
@@ -403,8 +508,8 @@
 
   root.SkpkBasket = {
     PERAN, PILIHAN_PERAN, peranKini, gantiPeran, boleh, inisial,
-    status, label, warna, baris, tambah, daftarTema, daftarJenis, normFas, tarifOtomatis, isiPenetapan, potensi,
-    TAHAP, NAMA_TAHAP, NAMA_STATUS, NAMA_AKSI, tahapSeri, langkahSeri, ajukan, putuskan, daftarAju, ambilAju, potensiAju, langkahAju, waktuAkhir, tugas,
+    status, label, warna, ditetapkan, sumberTetap, sisaHari, kadaluarsa, HARI_PERINGATAN, baris, tambah, daftarTema, daftarJenis, hapusTema, keluarkan, temaBisaHapus, pulihkanTema, normFas, tarifOtomatis, isiPenetapan, potensi,
+    TAHAP, NAMA_TAHAP, NAMA_STATUS, NAMA_AKSI, tahapSeri, langkahSeri, ajukan, putuskan, urungkan, daftarAju, ambilAju, potensiAju, langkahAju, waktuAkhir, tugas,
     notifikasi, tandaiBaca
   };
 })(window);
