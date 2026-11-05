@@ -44,8 +44,42 @@ API untuk dibaca program lain: `GET /api/komentar` (JSON).
 
 | Menu | Peran | Isi |
 |---|---|---|
-| **Browse** (Menu 1) | Cari, analisa, pilih | Seluruh populasi BC 2.0, flag RE, status seri; satu popup **Penetapan HS** untuk seri tercentang: tema + HS penetapan, tarif, pratinjau potensi, lalu simpan = masuk basket |
-| **Basket** (Menu 2) | Kirim | Hanya seri yang sudah dianalisa dan dinilai layak, ajukan ke Analis 2 (tanpa analisa di sini) |
+| **Browse** (Menu 1) | Cari, analisa, review draft, kirim | Seluruh populasi BC 2.0, flag RE, status seri; satu popup **Penetapan HS** untuk seri tercentang: tema + HS penetapan, tarif, pratinjau potensi, lalu simpan = masuk **draft** Analis 1 itu; **Daftar Analisa** (workspace) untuk review lalu **Send to Basket** |
+| **Basket** (Menu 2) | Keputusan (Analis 2 / Admin saja) | Seri kiriman semua Analis 1: Approve, Return, Reject, Send to SIRENA (tanpa analisa di sini). Analis 1 tidak bisa membuka menu ini |
+
+## Pemisahan Analis 1 dari Basket (5 Nov 2026, arahan atasan)
+
+Peran Analis 1 dipegang banyak orang, jadi pekerjaannya dipisah per orang dan Analis 1 tidak lagi melihat atau mengedit Basket.
+Bagian lain README yang masih menyebut Submit di Basket, Basket milik Analis 1, atau Reject yang mengunci seri sudah digantikan oleh bagian ini.
+
+- **Pengguna simulasi** (pengganti login, dropdown avatar): Analis 1 A, Analis 1 B, Analis 2, Admin. `skpk-v2:peran` sekarang berisi id
+  pengguna (`a1a` / `a1b` / `a2` / `admin`); nilai lama `junior` / `senior` dipetakan ke `a1a` / `a2`. Semua `oleh` (draft, analisa, pengajuan,
+  riwayat, dokumen) = id pengguna. Notifikasi dibaca per pengguna.
+- **Alur**: Penetapan HS di Browse → **Draft** milik analis itu → review di **Daftar Analisa** → **Send to Basket** (satu tema = satu pengajuan
+  `SUB-...`, Undo di toast) → Analis 2 Review → Approved → SIRENA. Bilah progres: Draft → Analis 2 Review → Approved → SIRENA.
+- **Draft terpisah per orang**: draft analis lain tampil di Browse berlabel `Draft - Analis 1 B` (kuning), tidak bisa dianalisa ulang
+  (masuk "Tidak ikut" di popup), dan HS / tarif / potensinya tidak ditampilkan (`SkpkBasket.analisaTampil`). Admin bisa semua draft.
+- **Daftar Analisa** (workspace Analis 1; ikon penanda di kepala tabel Browse, sebelah Flag RE; chip *Daftar Analisa* untuk keluar; diingat di
+  `sesi:browse2`): semua seri yang pernah dianalisa analis itu (Admin: semua analis) dan **tetap tampil setelah dikirim**: Draft, Returned,
+  Analis 2 Review, Approved, SIRENA, serta **Rejected** (hanya baca, analisa yang dulu diajukan dan catatan Analis 2 di tooltip; tampil selama
+  seri belum diambil analis lain, dan bisa dianalisa ulang lewat Browse). Kolom Tema Analisis dan Status paling kiri; Flag RE dan Cleansing
+  disembunyikan, Advance Filter tetap. Bar melayang: Penetapan HS (perbaiki), **Send to Basket**, dan lepas dari draft (analisa dibuang, Undo);
+  aksi hanya berlaku untuk Draft / Returned, seri lain dilewati dan disebut jumlahnya di toast. Dobel-klik = detail seri (dokumen pendukung,
+  tombol Send to Basket).
+- **Basket, Approval, Data History hanya Analis 2 / Admin**: menu Basket disembunyikan untuk Analis 1 dan alamatnya dialihkan ke Browse.
+  Analis 1 hanya bisa membuka detail seri miliknya sendiri (menu aktif Browse). Basket berisi kiriman semua Analis 1 dengan kolom **Analis**
+  (pengusul); saringan status In review / Processed / Expired.
+- **Keputusan Analis 2**: Approve, Return (pengajuan kembali ke draft pengusulnya berlabel Returned), **Reject**, Send to SIRENA. Analis 2 tidak
+  mengubah HS / tarif. **Reject = buang** (menggantikan Hapus dan Reject lama yang mengunci seri): per seri (bar melayang Basket), per tema
+  (ikon sampah di saringan tema), atau satu pengajuan (Approval / detail); catatan wajib; seri keluar dari basket, analisanya dibuang, dan
+  **bebas lagi di Browse** (putih). Jejaknya tetap di pengajuan (`riwayat` aksi `tolak` + daftar seri, salinan isi di `ditolak`) dan tampil di
+  Approval sebagai catatan "n series rejected"; pengajuan yang semua serinya ditolak berstatus Rejected.
+- **Notifikasi Analis 1**: Returned (hanya pengajuan miliknya, hilang setelah dikirim ulang / dilepas) dan draft hampir expired, keduanya membuka
+  Browse Daftar Analisa.
+- **Tanpa** ambang potensi minimal (kelayakan dinilai Analis 1; yang terlalu kecil di-Reject Analis 2) dan **tanpa** cek konflik penetapan antar
+  analis (risiko diterima; cek kemiripan dinilai terlalu berat).
+- **Data lama** dimigrasi otomatis: entri basket berstatus `basket` → `draft`, berstatus `tolak` → dibebaskan; analisa tanpa entri dibuang.
+  Contoh pengajuan dibagi ke Analis 1 A / B, ditambah satu draft Analis 1 B (*Stainless Coil Facility Review*).
 
 ## Approval, peran, dan notifikasi (4 Nov 2026)
 

@@ -175,7 +175,8 @@
     const m = (Date.now() - new Date(iso)) / 60000;
     return m < 1 ? 'now' : m < 60 ? Math.floor(m) + 'm' : m < 1440 ? Math.floor(m / 60) + 'h' : m < 43200 ? Math.floor(m / 1440) + 'd' : tglPendek(iso);
   }
-  const avatarHtml = (k, kelas = '') => `<span class="av ${kelas}" style="--av:${(B.PERAN[k] || B.PERAN.junior).warna}" aria-hidden="true">${B.inisial(k)}</span>`;
+  // k = id pengguna (atau kunci peran lama); inisial dan warna menurut peran
+  const avatarHtml = (k, kelas = '') => `<span class="av ${kelas}" style="--av:${(B.PERAN[B.peranOleh(k)] || B.PERAN.junior).warna}" aria-hidden="true">${B.inisial(k)}</span>`;
   const hrefAju = id => '#/smart-pcc/penelitian-skpk/approval/' + encodeURIComponent(id);
 
   // popover di bawah tombol; klik di luar / Esc = tutup
@@ -291,22 +292,42 @@
     return { atur };
   }
 
-  // hapus tema milik sendiri dari dropdown tema; Undo memulihkan seri yang keluar dari basket
+  // hapus tema dari draft sendiri (dropdown tema Penetapan HS); Undo memulihkan seri dan analisanya
   function hapusTema(nama, segarkan) {
     const h = B.hapusTema(nama);
     const n = Object.keys(h.hapus).length;
-    if (!n) return toast('galat', 'Cannot Delete', `${h.sisa} series of this theme are in approval or SIRENA.`);
+    if (!n) return toast('galat', 'Cannot Delete', 'This theme has no series in your draft.');
     segarkan();
-    toast('ok', 'Theme Deleted', `${nama} · ${n} series removed` + (h.sisa ? ` (${h.sisa} in approval kept)` : ''), { teks: 'Undo', fn: () => { B.pulihkanTema(h.hapus); segarkan(); } });
+    toast('ok', 'Theme Deleted', `${nama} · ${n} series removed from your draft` + (h.sisa ? ` (${h.sisa} sent or owned by others kept)` : ''), { teks: 'Undo', fn: () => { B.pulihkanTema(h.hapus); segarkan(); } });
   }
+  // Reject (Analis 2) dengan catatan wajib: seri terpilih / satu tema keluar dari basket dan bebas lagi di Browse
+  function tolakSeri(rows, judul, selesai) {
+    if (!rows.length) return toast('galat', 'Cannot Reject', 'Only series awaiting review can be rejected.');
+    modal('Reject', `<p class="ap-konfirm">${esc(judul)} · <b>${rows.length}</b> series</p>
+      <textarea class="inp ap-catatan-isi" id="apCatatan" rows="3" aria-label="Note"></textarea>`, [
+      { teks: 'Cancel', kelas: 'btn-garis' },
+      { teks: 'Reject', kelas: 'btn-merah', aksi: () => {
+        const c = $('#apCatatan').value.trim();
+        if (!c) { const el = $('#apCatatan'); el.classList.add('galat'); el.focus(); return false; }
+        const h = B.tolakSeri(rows.map(r => r.kunci), c);
+        if (!h || !h.n) { toast('galat', 'Cannot Reject', 'Only series awaiting review can be rejected.'); return; }
+        gambarAkun();
+        selesai();
+        toast('ok', 'Rejected', `${h.n} series returned to Browse` + (h.sisa ? ` (${h.sisa} already approved kept)` : '') + '.');
+      } }
+    ]);
+    setTimeout(() => { const c = $('#apCatatan'); if (c) { c.focus(); c.oninput = () => c.classList.remove('galat'); } });
+  }
+  // seri yang masih menunggu keputusan Analis 2 (bisa di-Reject)
+  const bisaTolak = r => B.tahapSeri(B.status(r)) === 'review' && B.status(r).unit;
 
   const htmlAkun = () => '<div class="kp-akun" data-akun></div>';
   function gambarAkun() {
     tutupPop();
-    const k = B.peranKini();
+    const p = B.penggunaKini();
     const n = B.notifikasi().length;
     const html = `<button class="kp-btn" data-buka="notif" aria-haspopup="dialog" aria-expanded="false" title="Notifications" aria-label="Notifications${n ? `, ${n} pending` : ''}"><span class="ik">${IKON.lonceng}</span>${n ? `<b class="kp-badge merah">${n > 99 ? '99+' : n}</b>` : ''}</button>
-      <button class="kp-peran" data-buka="peran" aria-haspopup="menu" aria-expanded="false" title="${esc(B.PERAN[k].nama)}" aria-label="Role: ${esc(B.PERAN[k].nama)}">${avatarHtml(k)}<span class="ik">${IKON.turun}</span></button>`;
+      <button class="kp-peran" data-buka="peran" aria-haspopup="menu" aria-expanded="false" title="${esc(p.nama)}" aria-label="User: ${esc(p.nama)}">${avatarHtml(p.id)}<span class="ik">${IKON.turun}</span></button>`;
     document.querySelectorAll('[data-akun]').forEach(el => { el.innerHTML = html; });
     // jumlah pengajuan yang menunggu peran aktif, di tombol Approval (Basket)
     const tg = B.tugas().length;
@@ -318,17 +339,17 @@
   });
 
   function bukaAkun(j) {
-    const k = B.peranKini();
-    const el = bukaPop(j, 'pop-akun', B.PILIHAN_PERAN.map(x => `<button class="pop-mi${x === k ? ' kini' : ''}" role="menuitemradio" aria-checked="${x === k}" data-peran="${x}">${avatarHtml(x, 'kecil')}<span>${esc(B.PERAN[x].nama)}</span></button>`).join(''));
+    const k = B.penggunaKini().id;
+    const el = bukaPop(j, 'pop-akun', B.PENGGUNA.map(x => `<button class="pop-mi${x.id === k ? ' kini' : ''}" role="menuitemradio" aria-checked="${x.id === k}" data-pengguna="${x.id}">${avatarHtml(x.id, 'kecil')}<span>${esc(x.nama)}</span></button>`).join(''));
     if (!el) return;
     el.setAttribute('role', 'menu');
     el.onclick = e => {
-      const b = e.target.closest('[data-peran]');
+      const b = e.target.closest('[data-pengguna]');
       if (!b) return;
-      if (b.dataset.peran === k) return tutupPop();
-      B.gantiPeran(b.dataset.peran);
+      if (b.dataset.pengguna === k) return tutupPop();
+      B.gantiPengguna(b.dataset.pengguna);
       jalankan();
-      toast('info', 'Role Switched', B.PERAN[b.dataset.peran].nama);
+      toast('info', 'User Switched', B.penggunaKini().nama);
     };
   }
 
@@ -339,13 +360,16 @@
   };
   function bukaNotif(j) {
     const daftar = B.notifikasi();
+    // Returned dan expiring milik Analis 1 = draftnya sendiri: buka Browse mode Daftar Analisa (Analis 1 tidak membuka Basket)
+    const keDraft = x => x.jenis === 'kembali' || (B.peranKini() === 'junior' && (x.jenis === 'expiring' || x.jenis === 'expired'));
     const baris = x => {
       const [judul, ik] = JENIS_NOTIF[x.jenis];
       const exp = x.jenis === 'expiring' || x.jenis === 'expired';
       const tip = exp ? `${x.n} series past or within ${B.HARI_PERINGATAN} days of the 2-year limit` : x.catatan || '';
       const kanan = x.jenis === 'expiring' ? `<span class="notif-umur" title="${x.sisa} days left">${x.sisa}d</span>`
         : exp ? '' : `<span class="notif-umur" title="${esc(waktuPenuh(x.waktu))}">${umur(x.waktu)}</span>`;
-      return `<a class="notif${x.baru ? ' baru' : ''}" href="${exp ? '#/smart-pcc/penelitian-skpk' : hrefAju(x.aju.id)}" data-notif="${esc(x.id)}"${exp ? ` data-tema="${esc(x.tema)}"` : ''}${tip ? ` title="${esc(tip)}"` : ''}>
+      const href = keDraft(x) ? BERANDA : exp ? BASKET : hrefAju(x.aju.id);
+      return `<a class="notif${x.baru ? ' baru' : ''}" href="${href}" data-notif="${esc(x.id)}"${keDraft(x) ? ' data-draft' : exp ? ` data-tema="${esc(x.tema)}"` : ''}${tip ? ` title="${esc(tip)}"` : ''}>
         <span class="notif-ik nf-${x.jenis}"><span class="ik">${IKON[ik]}</span></span>
         <span class="notif-isi"><b>${judul}</b><span>${exp ? `<em>${x.n}</em> · ` : ''}${esc(x.tema)}</span></span>${kanan}</a>`;
     };
@@ -359,9 +383,9 @@
       const a = e.target.closest('[data-notif]');
       if (!a) return;
       B.tandaiBaca([a.dataset.notif]);
-      // seri yang hampir expired: buka Basket dengan saringan tema itu
-      if (a.dataset.tema != null) {
-        simpanan.tulis('sesi:profil-tema', a.dataset.tema);
+      // seri yang hampir expired di Basket: buka Basket dengan saringan tema itu; Returned / draft hampir expired: Browse mode Daftar Analisa
+      if (a.dataset.tema != null || a.dataset.draft != null) {
+        if (a.dataset.draft != null) { browse.draft = true; simpanBrowse(); } else simpanan.tulis('sesi:profil-tema', a.dataset.tema);
         if (location.hash === a.getAttribute('href')) { e.preventDefault(); tutupPop(); jalankan(); return; }
       }
       gambarAkun();
@@ -372,7 +396,7 @@
   function htmlLangkah(L) {
     const titik = (x, i) => (x.keadaan === 'lewat' ? IKON.centang : x.keadaan === 'gagal' ? IKON.silang : x.keadaan === 'balik' ? IKON.urung : x.keadaan === 'kini' ? '<i></i>' : i + 1);
     return `<ol class="ap-langkah" aria-label="Progress">${L.map((x, i) => {
-      const tip = [x.oleh && B.PERAN[x.oleh] ? B.PERAN[x.oleh].nama : '', x.waktu ? waktuPenuh(x.waktu) : '', x.ket || ''].filter(Boolean).join('\n');
+      const tip = [x.oleh ? B.namaOleh(x.oleh) : '', x.waktu ? waktuPenuh(x.waktu) : '', x.ket || ''].filter(Boolean).join('\n');
       return `<li class="${x.keadaan}"${tip ? ` title="${esc(tip)}"` : ''}${x.keadaan !== 'lewat' && x.keadaan !== 'nanti' ? ' aria-current="step"' : ''}><span class="ap-titik">${titik(x, i)}</span><span class="ap-langkah-l">${esc(x.label)}</span><span class="ap-langkah-k">${x.waktu ? tglPendek(x.waktu) : ''}</span></li>`;
     }).join('')}</ol>`;
   }
@@ -406,15 +430,22 @@
     ]);
     setTimeout(() => { const c = $('#apCatatan'); if (c) { c.focus(); c.oninput = () => c.classList.remove('galat'); } });
   }
-  // ajukan seri ke analis senior (Basket: bar melayang; detail: tombol Submit) langsung, tanpa popup catatan
+  // Kirim ke Basket (Browse mode Daftar Analisa: bar melayang; detail: tombol) = ajukan draft sendiri ke Analis 2, langsung tanpa popup.
+  // Satu tema = satu pengajuan; Undo di toast membatalkan semuanya
   function ajukanSeri(rows, selesai) {
-    const siap = rows.filter(r => { const s = B.status(r); return s && s.milikSaya && s.status === 'basket' && s.hs; });
-    if (!siap.length) return toast('galat', 'Cannot Submit', 'No series with a final HS selected.');
-    const a = B.ajukan(siap, '');
-    if (!a) return toast('galat', 'Cannot Submit', 'Your role cannot submit series.');
+    const siap = rows.filter(r => { const s = B.status(r); return s && s.milikSaya && s.status === 'draft' && s.hs; });
+    if (!siap.length) return toast('galat', 'Cannot Send', 'No draft series selected.');
+    const daftar = B.ajukan(siap, '');
+    if (!daftar.length) return toast('galat', 'Cannot Send', 'Your role cannot send series to the basket.');
     gambarAkun();
-    selesai(a);
-    toast('ok', 'Submitted', `${a.seri.length} series`, tombolUrung(a.id));
+    selesai(daftar);
+    const n = daftar.reduce((x, a) => x + a.seri.length, 0);
+    // pilihan di Daftar Analisa bisa berisi seri yang sudah dikirim / ditolak: dilewati
+    const lewat = rows.length - siap.length;
+    toast('ok', 'Sent to Basket', `${n} series` + (daftar.length > 1 ? ` · ${daftar.length} themes` : ' · ' + daftar[0].tema) + (lewat ? ` (${lewat} not in draft skipped)` : ''), { teks: 'Undo', fn: () => {
+      if (!daftar.map(a => B.urungkan(a.id)).every(Boolean)) toast('galat', 'Cannot Undo', 'Analis 2 has already acted on this.');
+      jalankan();
+    } });
   }
 
   // ---------- tombol Back ----------
@@ -443,7 +474,8 @@
     if (/penelitian-skpk$/.test(j)) return 'Basket';
     return 'Browse';
   }
-  const indukHal = h => (/penelitian-skpk\//.test(h) ? BASKET : h === BERANDA ? null : BERANDA);
+  // Analis 1 tidak membuka Basket: induk halaman detail = Browse
+  const indukHal = h => (/penelitian-skpk\//.test(h) && B.boleh.basket() ? BASKET : h === BERANDA ? null : BERANDA);
   function tombolKembali() {
     const kini = location.hash;
     const ke = jejak.length > 1 && jejak[jejak.length - 1] === kini ? jejak[jejak.length - 2] : indukHal(kini);
@@ -544,40 +576,53 @@
 
   // kolom basket di Basket
   const isian = r => B.status(r) || {};
-  // warna baris (B.warna), sama di Browse dan Basket; di Basket sekaligus saringan: kuning = masih di basket, hijau = sudah diproses
-  const STATUS_SERI = [['kuning', 'In basket'], ['hijau', 'Processed'], ['merah', 'Expired']];
+  // warna baris (B.warna), sama di Browse dan Basket; di Basket sekaligus saringan: kuning = menunggu Analis 2, hijau = Approved / SIRENA
+  const STATUS_SERI = [['kuning', 'In review'], ['hijau', 'Processed'], ['merah', 'Expired']];
   const SEMUA_STATUS = () => Object.fromEntries(STATUS_SERI.map(([k]) => [k, true]));
-  const statusSeri = r => { const w = B.warna(r); return w === 'hijau' || w === 'merah' ? w : 'kuning'; };
+  const statusSeri = r => { const w = B.warna(r); return w === 'merah' ? w : B.tahapSeri(B.status(r)) === 'review' ? 'kuning' : 'hijau'; };
   const kelasWarna = r => { const w = B.warna(r); return w ? 'st-' + w : ''; };
-  // kolom Status Basket: nama tahap saja, berwarna; catatan / tanggal kirim di tooltip, tautan ke pengajuannya di Approval
+  // kolom Status: nama tahap saja, berwarna; catatan / tanggal kirim di tooltip, tautan ke pengajuannya di Approval (hanya pemegang Basket)
   function namaStatus(s) {
     const t = B.tahapSeri(s);
-    return !t ? null : t === 'basket' && s.kembali ? 'Returned' : t === 'tolak' ? 'Rejected' : B.NAMA_TAHAP[t];
+    return !t ? null : t === 'draft' && s.kembali ? 'Returned' : B.NAMA_TAHAP[t];
   }
   function teksStatus(s) {
     const t = B.tahapSeri(s);
     if (!t) return '-';
-    const kembali = t === 'basket' && s.kembali;
-    const nada = t === 'tolak' ? 'gagal' : kembali ? 'balik' : t === 'sirena' ? 'kirim' : t === 'basket' ? 'awal' : '';
+    const kembali = t === 'draft' && s.kembali;
+    const nada = kembali ? 'balik' : t === 'sirena' ? 'kirim' : t === 'draft' ? 'awal' : '';
     const ket = s.sirena && t === 'sirena' ? s.sirena.nomor + ' · ' + tgl(s.sirena.waktu) : kembali ? s.kembali.catatan : '';
     const isi = `<span class="st-teks ${nada}"${ket ? ` title="${esc(ket)}"` : ''}>${esc(namaStatus(s))}</span>`;
     const id = s.pengajuan || (s.kembali && s.kembali.id);
-    return id && s.milikSaya ? `<a class="mt-link" href="${hrefAju(id)}">${isi}</a>` : isi;
+    return id && s.unit && B.boleh.basket() ? `<a class="mt-link" href="${hrefAju(id)}">${isi}</a>` : isi;
   }
-  // hasil analisa (Browse) satu seri: HS penetapan, tarif akhir, pungutan lain
-  const an = r => B.analisa(r) || {};
+  // hasil analisa (Browse) satu seri: HS penetapan, tarif akhir, pungutan lain. Analis 1 tidak melihat analisa draft analis lain.
+  // Di Daftar Analisa, seri yang di-Reject menampilkan analisa yang dulu diajukan (dari jejak pengajuan)
+  // jejak Reject milik pengguna aktif; hanya berisi selama tabel Daftar Analisa yang dihitung (dasarBrowse), kosong di Browse biasa
+  let tolakKerja = new Map();
+  const tolakR = r => (!B.status(r) && tolakKerja.get(r.kunci)) || null;
+  const anTampil = r => B.analisaTampil(r) || (tolakR(r) || {}).isi || null;
+  const an = r => anTampil(r) || {};
+  const pot = r => { const a = anTampil(r); return a ? B.potensi(r, a) : null; };
   const KP = {
     hsTetap: { key: 'hsTetap', label: 'HS Penetapan', saring: 'teks', lebar: 120, nilai: r => an(r).hs || null, isi: r => t(an(r).hs) },
     trfTetap: { key: 'trfTetap', label: 'Tarif Penetapan', tipe: 'angka', saring: 'teks', lebar: 140, nilai: r => an(r).bm ?? null, isi: r => (an(r).bm == null ? '-' : an(r).bm + '%') + (an(r).lain && an(r).lain.length ? ` <span class="ada-tip" title="${esc(an(r).lain.map(x => x.jenis + ' ' + x.tarif + '%').join(', '))}">+${an(r).lain.length}</span>` : '') },
     ppnTetap: { key: 'ppnTetap', label: 'Tarif PPN Penetapan', tipe: 'angka', saring: 'teks', lebar: 140, nilai: r => an(r).ppn ?? null, isi: r => (an(r).ppn == null ? '-' : an(r).ppn + '%') },
     pphTetap: { key: 'pphTetap', label: 'Tarif PPh Penetapan', tipe: 'angka', saring: 'teks', lebar: 140, nilai: r => an(r).pph ?? null, isi: r => (an(r).pph == null ? '-' : an(r).pph + '%') },
-    potensi: { key: 'potensi', label: 'Potensi', tipe: 'angka', saring: 'teks', lebar: 150, nilai: r => { const p = B.potensi(r); return p ? Math.round(p.selisih.total) : null; },
-      isi: r => { const p = B.potensi(r); return p ? `<span title="${esc(`BM ${rupiah(p.selisih.bm)}, PPN ${rupiah(p.selisih.ppn)}, PPh ${rupiah(p.selisih.pph)}`)}">${rupiah(p.selisih.total)}</span>` : '-'; } },
+    potensi: { key: 'potensi', label: 'Potensi', tipe: 'angka', saring: 'teks', lebar: 150, nilai: r => { const p = pot(r); return p ? Math.round(p.selisih.total) : null; },
+      isi: r => { const p = pot(r); return p ? `<span title="${esc(`BM ${rupiah(p.selisih.bm)}, PPN ${rupiah(p.selisih.ppn)}, PPh ${rupiah(p.selisih.pph)}`)}">${rupiah(p.selisih.total)}</span>` : '-'; } },
     tema: { key: 'temaBasket', label: 'Tema Analisis', saring: 'teks', lebar: 190, nilai: r => isian(r).tema, isi: r => t(isian(r).tema) },
     jenis: { key: 'jenisTema', label: 'Jenis Tema', saring: 'teks', lebar: 190, nilai: r => isian(r).jenis || null, isi: r => t(isian(r).jenis) },
     catatan: { key: 'catatanBasket', label: 'Analisis', saring: 'teks', lebar: 170, nilai: r => isian(r).catatan || null,
       isi: r => { const c = isian(r).catatan; return `<span title="${esc(c || '')}">${t(c && c.length > 60 ? c.slice(0, 60) + '…' : c)}</span>`; } },
-    status: { key: 'statusBasket', label: 'Status', saring: 'teks', lebar: 190, nilai: r => namaStatus(isian(r)), isi: r => teksStatus(isian(r)) }
+    status: { key: 'statusBasket', label: 'Status', saring: 'teks', lebar: 190, nilai: r => namaStatus(isian(r)), isi: r => teksStatus(isian(r)) },
+    // Daftar Analisa: tema dan status juga untuk seri yang di-Reject (Rejected, catatan Analis 2 di tooltip)
+    temaKerja: { key: 'temaKerja', label: 'Tema Analisis', saring: 'teks', lebar: 190, nilai: r => isian(r).tema || (tolakR(r) || {}).tema || null,
+      isi: r => t(isian(r).tema || (tolakR(r) || {}).tema) },
+    statusKerja: { key: 'statusKerja', label: 'Status', saring: 'teks', lebar: 150, nilai: r => (tolakR(r) ? 'Rejected' : namaStatus(isian(r))),
+      isi: r => { const x = tolakR(r); return x ? `<span class="st-teks gagal" title="${esc(x.catatan + ' · ' + B.namaOleh(x.oleh) + ', ' + tgl(x.waktu))}">Rejected</span>` : teksStatus(isian(r)); } },
+    // pengusul (Analis 1 pemilik draft / pengajuan)
+    analis: { key: 'analisBasket', label: 'Analis', saring: 'teks', lebar: 130, nilai: r => (isian(r).oleh ? B.namaOleh(isian(r).oleh) : null), isi: r => t(isian(r).oleh ? B.namaOleh(isian(r).oleh) : '') }
   };
 
   // Nama Perusahaan dan NPWP Perusahaan langsung setelah delapan kolom urutan rapat (Excel 3), supaya terlihat tanpa menggeser jauh
@@ -606,6 +651,10 @@
   const TERWAKILI = new Set(KOLOM_BAWAAN_BROWSE_AKTIF.map(excelDari).filter(Boolean));
   const KOLOM_BROWSE = bergrup(KOLOM_BAWAAN_BROWSE_AKTIF.concat([K.dokumen], root.SKPK_SUMBER.kolom.filter(c => !TERWAKILI.has(c.label)).map(kolomPib)));
   KOLOM_BROWSE.forEach(k => { k.tipe = tipeDari(k); });
+  // Daftar Analisa: Tema Analisis dan Status (Draft / Returned / Analis 2 Review / Approved / SIRENA / Rejected, catatan di tooltip)
+  // paling kiri; Status Basket tidak perlu
+  const KOLOM_DRAFT = bergrup([KP.temaKerja, KP.statusKerja]).map(k => ({ ...k, tipe: 'teks' })).concat(KOLOM_BROWSE.filter(k => k.key !== KB.basket.key));
+  const BAWAAN_DRAFT = [KP.temaKerja.key, KP.statusKerja.key].concat(KOLOM_BAWAAN_BROWSE_AKTIF.map(k => k.key).filter(k => k !== KB.basket.key));
   const PER_KOLOM_BROWSE = new Map(KOLOM_BROWSE.map(k => [k.key, k]));
   const JML_BAWAAN_BROWSE = KOLOM_BAWAAN_BROWSE_AKTIF.length;
   // Basket tampil ringkas: perusahaan, barang, dokumen, kantor, tanggal, status, HS dan tarif pemberitahuan vs penetapan; sisanya lewat Columns.
@@ -614,9 +663,10 @@
   const LEBAR_BASKET = { temaBasket: 170, perusahaan: 150, uraian: 160, dokumen: 135, noPib: 145, kantorKode: 120, tglDaftar: 150, statusBasket: 110, hs: 95, trfBm: 75, hsTetap: 125, trfTetap: 135 };
   // Tema Analisis paling kiri supaya tiap seri jelas masuk tema apa; lalu dokumen (Kode Kantor, Nomor, Tanggal, Seri), barang,
   // hasil analisa dari Browse, dan Status paling belakang (komentar pengguna 4 Nov 2026)
-  const KOLOM_BAWAAN_PROFIL = [KP.tema, K.kantor, K.noPib, K.tglDaftar, K.seri, K.uraian, K.perusahaan, K.hs, K.trfBm, KP.hsTetap, KP.trfTetap, KP.potensi, KP.status];
+  // Analis (pengusul) setelah Tema: Basket berisi kiriman banyak Analis 1 (5 Nov 2026)
+  const KOLOM_BAWAAN_PROFIL = [KP.tema, KP.analis, K.kantor, K.noPib, K.tglDaftar, K.seri, K.uraian, K.perusahaan, K.hs, K.trfBm, KP.hsTetap, KP.trfTetap, KP.potensi, KP.status];
   // Flag RE (Inkonsistensi, Perluasan, SKA) dipindah ke Browse (slide 1c)
-  const KOLOM_PROFIL = [KP.tema, K.uraian, K.tipe, K.merk, K.hs, K.hsSaran, K.trfBm, K.trfSaran, KP.hsTetap, KP.trfTetap, KP.ppnTetap, KP.pphTetap, KP.potensi, KP.status, K.skep, K.perusahaan, K.npwp, K.kantor, K.noPib,
+  const KOLOM_PROFIL = [KP.tema, KP.analis, K.uraian, K.tipe, K.merk, K.hs, K.hsSaran, K.trfBm, K.trfSaran, KP.hsTetap, KP.trfTetap, KP.ppnTetap, KP.pphTetap, KP.potensi, KP.status, K.skep, K.perusahaan, K.npwp, K.kantor, K.noPib,
     K.dokumen, K.aju, K.tglDaftar, K.waktuRekam, K.pemasok, K.seri, K.jmlSatuan, K.satuan, K.bmBayar, K.negara, K.devisa, K.jalur,
     KP.jenis, KP.catatan,
     { key: 'umur', label: 'Umur Dokumen', saring: 'teks', lebar: 130, isi: r => (r.umur == null ? '-' : r.umur + ' hari') },
@@ -766,7 +816,17 @@
     }
     return !bersihAktif().some(k => kenaBersih(r, k));
   }
-  const dasarBrowse = () => D.ROWS.filter(r => lolosBersih(r) && lolosRe(r));
+  // mode Daftar Analisa (Analis 1 / Admin) = workspace analis: semua seri yang pernah ia analisa (Admin: semua analis), apa pun tahapnya
+  // (Draft, Returned, Analis 2 Review, Approved, SIRENA), ditambah seri pengajuannya yang di-Reject Analis 2 (hanya baca, selama belum
+  // diambil analis lain). Yang bisa diubah / dikirim / dilepas hanya Draft dan Returned. Cleansing dan Flag RE tidak berlaku,
+  // Advance Filter tetap. Diingat di sesi:browse2 (draft), tidak ikut Reset
+  const modeDraft = () => B.boleh.ajukan() && !!browse.draft;
+  const diKerjaSaya = r => { const s = B.status(r); return s ? s.unit && s.milikSaya : tolakKerja.has(r.kunci); };
+  const dasarBrowse = () => {
+    if (!modeDraft()) { tolakKerja = new Map(); return D.ROWS.filter(r => lolosBersih(r) && lolosRe(r)); }
+    tolakKerja = B.ditolakSaya();
+    return D.ROWS.filter(diKerjaSaya);
+  };
 
   function dataBrowse() {
     const rows = dasarBrowse();
@@ -830,6 +890,13 @@
   const periodeMulai = () => { const x = new Date(); x.setFullYear(x.getFullYear() - 2); return isoLokal(x); };
   const periodeAkhir = () => { const x = new Date(); x.setDate(x.getDate() - 30); return isoLokal(x); };
   function halBrowse() {
+    const draft = modeDraft();
+    if (draft) lihatBersih = null;
+    const tombolBar = draft
+      ? `<button class="biru" id="btnHs" aria-haspopup="dialog" title="Penetapan HS"><span class="ik">${IKON.pena}</span></button>
+        <button class="biru" id="btnKirim" title="Send to Basket"><span class="ik">${IKON.kirim}</span></button>
+        <button id="btnLepas" title="Remove from draft"><span class="ik">${IKON.sampah}</span></button>`
+      : B.boleh.analisa() ? `<button class="biru" id="btnHs" aria-haspopup="dialog" title="Penetapan HS"><span class="ik">${IKON.pena}</span></button>` : '';
     view.innerHTML = `
       <div class="wadah">
         <section class="kartu kartu-atas" id="kartuBrowse">
@@ -852,12 +919,13 @@
         <section class="kartu kartu-tabel">
           <div class="kartu-kepala ringkas">
             <span id="chipLihat"></span>
-            <button class="btn btn-garis biru btn-ikon btn-bersih" id="btnRe" aria-haspopup="dialog" aria-expanded="false"><span class="ik">${IKON.bendera}</span></button>
-            <button class="btn btn-garis biru btn-ikon btn-bersih" id="btnBersih" aria-haspopup="dialog" aria-expanded="false"><span class="ik">${IKON.sapu}</span></button>
+            ${B.boleh.ajukan() ? `<button class="btn btn-garis biru btn-ikon btn-bersih${draft ? ' aktif' : ''}" id="btnDraft" aria-pressed="${draft}" title="${draft ? 'Back to all data' : 'Daftar Analisa'}" aria-label="Daftar Analisa"><span class="ik">${IKON.penanda}</span></button>` : ''}
+            <button class="btn btn-garis biru btn-ikon btn-bersih" id="btnRe" aria-haspopup="dialog" aria-expanded="false"${draft ? ' hidden' : ''}><span class="ik">${IKON.bendera}</span></button>
+            <button class="btn btn-garis biru btn-ikon btn-bersih" id="btnBersih" aria-haspopup="dialog" aria-expanded="false"${draft ? ' hidden' : ''}><span class="ik">${IKON.sapu}</span></button>
             <button class="btn btn-garis biru btn-ikon" id="afExport" title="Export"><span class="ik">${IKON.unduh}</span></button></div>
           <div class="kartu-isi" id="tblBrowse"></div>
         </section>
-        ${htmlBarPilih(`<button class="biru" id="btnHs" aria-haspopup="dialog" title="Penetapan HS"><span class="ik">${IKON.pena}</span></button>`)}
+        ${htmlBarPilih(tombolBar)}
       </div>`;
 
     isiStat($('#statBrowse'), dataBrowse());
@@ -992,15 +1060,18 @@
     const cekAn = () => aturBarPilih(tabel ? tabel.terpilih().length : 0);
     pasangLipat($('#kartuBrowse'));
 
+    const idTabel = draft ? 'browse-kerja' : 'browse';
     tabel = root.buatTabel($('#tblBrowse'), {
-      id: 'browse',
+      id: idTabel,
       ingat: true,
-      kolom: KOLOM_BROWSE,
-      kolomBawaan: KOLOM_BAWAAN_BROWSE_AKTIF.map(k => k.key),
+      kolom: draft ? KOLOM_DRAFT : KOLOM_BROWSE,
+      kolomBawaan: draft ? BAWAAN_DRAFT : KOLOM_BAWAAN_BROWSE_AKTIF.map(k => k.key),
       data: dataBrowse,
       centang: true,
       stripRingkas: true,
       kelasBaris: kelasWarna,
+      // mode Daftar Analisa: dobel-klik = detail seri (dokumen pendukung, progres); seri yang di-Reject tidak punya detail lagi
+      ...(draft ? { dobelKlik: r => { if (!tolakR(r)) location.hash = '#/smart-pcc/penelitian-skpk/detail-skpk/' + r.id; } } : {}),
       setelahRender: () => cekAn(),
       aksi: () => `<button class="btn-aksi biru" data-aksi="trx" title="Transaction data">${IKON.dok}</button><button class="btn-aksi kuning" data-aksi="perusahaan" title="Company profile">${IKON.gedung}</button>`,
       klikAksi(nama, r) {
@@ -1012,7 +1083,7 @@
     beritaPulih(!!browse.aktif || !pilihRe.semua || bersihAktif().length > 0 || tabel.adaKeadaan(), () => {
       aturBrowse(awalBrowse());
       lihatBersih = null;
-      lupakanTabel('browse');
+      lupakanTabel(idTabel);
       if ($('#tblBrowse')) halBrowse();
     });
 
@@ -1038,7 +1109,7 @@
       isiStat($('#statBrowse'), dataBrowse());
       toast('info', 'Filters Reset', 'Advance Filter and column filters were cleared.', { teks: 'Undo', fn: () => {
         aturBrowse(sebelum.browse);
-        simpanan.tulis('tabel:browse', sebelum.tabel);
+        simpanan.tulis('tabel:' + idTabel, sebelum.tabel);
         if ($('#tblBrowse')) halBrowse();
       } });
     };
@@ -1089,6 +1160,7 @@
       b.title = aktif.length ? 'Cleansing: ' + aktif.map(k => NAMA_BERSIH[k]).join(', ') : 'Cleansing';
       b.setAttribute('aria-label', b.title);
       const c = $('#chipLihat');
+      if (draft) { c.innerHTML = `<button type="button" class="chip-lihat" title="Back to all data" aria-label="Exit view: Daftar Analisa"><span class="ik">${IKON.penanda}</span>Daftar Analisa<span class="ik">${IKON.silang}</span></button>`; return; }
       if (!lihatBersih) { c.innerHTML = ''; return; }
       const nama = lihatBersih === 'semua' ? 'Excluded' : NAMA_BERSIH[lihatBersih];
       c.innerHTML = `<button type="button" class="chip-lihat" title="Back to cleansed data" aria-label="Exit view: ${nama}"><span class="ik">${IKON.mata}</span>${nama}<span class="ik">${IKON.silang}</span></button>`;
@@ -1135,24 +1207,43 @@
         isiPopBersih(el);
       };
     };
+    // mode Daftar Analisa: tombol penanda / chip = masuk / keluar; halaman digambar ulang karena kolom dan isi tabelnya berbeda
+    const gantiDraft = () => { browse.draft = !browse.draft; simpanBrowse(); tutupPop(); halBrowse(); };
+    if ($('#btnDraft')) $('#btnDraft').onclick = gantiDraft;
     $('#chipLihat').onclick = e => {
       if (!e.target.closest('.chip-lihat')) return;
+      if (draft) return gantiDraft();
       lihatBersih = null;
       tutupPop();
       segarBersih();
     };
 
-    // analisa (HS penetapan, tarif, potensi) dan tema dalam satu popup; seri yang tersimpan dilepas centangnya
-    $('#btnHs').onclick = () => {
-      const rows = tabel.terpilih().map(id => D.PER_ID.get(id)).filter(Boolean);
-      bukaPenetapanHs(rows, simpan => {
+    const terpilih = () => tabel.terpilih().map(id => D.PER_ID.get(id)).filter(Boolean);
+    const segarTabel = () => { if (!$('#tblBrowse')) return; tabel.render(); isiStat($('#statBrowse'), dataBrowse()); };
+    // analisa (HS penetapan, tarif, potensi) dan tema dalam satu popup; seri yang tersimpan dilepas centangnya (Analis 2 tidak menganalisa)
+    if ($('#btnHs')) $('#btnHs').onclick = () => {
+      bukaPenetapanHs(terpilih(), simpan => {
         if (!$('#tblBrowse')) return;
         const id = new Set(simpan.map(r => r.id));
         if (!tabel.lepasPilihan(x => id.has(x))) tabel.render();
       });
     };
+    // mode Daftar Analisa: Kirim ke Basket (satu tema = satu pengajuan, Undo di toast) dan lepas dari draft (analisa dibuang, Undo di toast)
+    if ($('#btnKirim')) $('#btnKirim').onclick = () => ajukanSeri(terpilih(), () => { tabel.kosongkanPilihan(); segarTabel(); });
+    if ($('#btnLepas')) $('#btnLepas').onclick = () => {
+      const pilih = terpilih(), terpilihN = pilih.length;
+      const h = B.keluarkan(pilih);
+      const n = Object.keys(h.hapus).length;
+      if (!n) return toast('galat', 'Cannot Remove', 'Only Draft / Returned series can be removed.');
+      tabel.kosongkanPilihan();
+      segarTabel();
+      const lewat = terpilihN - n;
+      toast('ok', 'Removed', `${n} series removed from your draft` + (lewat > 0 ? ` (${lewat} not in draft skipped)` : '') + '.', { teks: 'Undo', fn: () => { B.pulihkanTema(h.hapus); segarTabel(); } });
+    };
     $('#btnBatalPilih').onclick = () => tabel.kosongkanPilihan();
     cekAn();
+    // halaman bisa digambar ulang tanpa router (mode Daftar Analisa, pulihkan saringan): isi lagi lonceng dan avatar di kepala kartu
+    gambarAkun();
   }
 
   function modalPerusahaan(r) {
@@ -1178,7 +1269,7 @@
     const dua = (a, b) => `<div class="dua">${ro(a)}${ro(b)}</div>`;
     const cif = barang.reduce((s, x) => s + (x.m['CIF'] || 0), 0);
     // HS dan tarif ditetapkan: isian basket bila ada, selain itu HS Suggestion mesin, selain itu pemberitahuan
-    const tetap = x => { const s = B.status(x); return s && s.hs ? { hs: s.hs, bm: s.bm } : { hs: x.hsSaran || x.hs, bm: x.hsSaran ? x.trfSaran : x.trfBm }; };
+    const tetap = x => { const s = B.analisaTampil(x); return s && s.hs ? { hs: s.hs, bm: s.bm } : { hs: x.hsSaran || x.hs, bm: x.hsSaran ? x.trfSaran : x.trfBm }; };
 
     const PIHAK = {
       importir: [['No.ID', m['Npwp Imp']], ['Nama', m['Nm Imp']], ['Alamat', '-']],
@@ -1392,7 +1483,7 @@
     };
   }
   // dokumen dari form cepat: satu file untuk tiap seri yang disimpan; nama dokumen = nama file
-  const unggahKeSeri = (rows, file) => Promise.all(rows.map(r => L.tambah(r.kunci, file, { nama: file.name.replace(/\.[^.]+$/, ''), oleh: B.peranKini() })))
+  const unggahKeSeri = (rows, file) => Promise.all(rows.map(r => L.tambah(r.kunci, file, { nama: file.name.replace(/\.[^.]+$/, ''), oleh: B.penggunaKini().id })))
     .catch(() => toast('galat', 'Gagal Mengunggah', file.name));
 
   // Penetapan HS + Save to theme dalam satu popup di Browse (5 Nov 2026; dulu analisa di Basket lalu dua langkah terpisah di Browse).
@@ -1406,11 +1497,12 @@
   function bukaPenetapanHs(pilihan, selesai) {
     let rows = pilihan.filter(B.bisaAnalisa);
     const exp = pilihan.filter(B.kadaluarsa).length, kunci = pilihan.length - rows.length - exp;
-    const lewat = [exp && `${exp} expired`, kunci && `${kunci} sudah diajukan / milik unit lain`].filter(Boolean).join(', ');
+    const lewat = [exp && `${exp} expired`, kunci && `${kunci} draft analis lain / sudah di Basket / milik unit lain`].filter(Boolean).join(', ');
     if (!rows.length) return toast('galat', 'Tidak Bisa Menetapkan HS', `Seri terpilih tidak bisa dianalisa: ${lewat}.`);
     let pakai = rows.map(() => true);
     const dipakai = () => rows.filter((r, i) => pakai[i]);
-    const diBasket = r => { const s = B.status(r); return !!(s && s.milikSaya); };
+    // seri yang sudah di draft sendiri: hanya analisanya yang diperbarui, tetap di temanya
+    const diBasket = r => { const s = B.status(r); return !!(s && s.milikSaya && s.status === 'draft'); };
     const jenisTetap = r => Array.from(new Set((r.penetapan || []).map(p => p.jenis))).join(', ') || (B.ditetapkan(r) ? 'Ditetapkan' : '');
     const htmlSeri = (r, i) => {
       const tetap = an(r).hs;
@@ -1420,7 +1512,7 @@
         <td>${esc(r.noPib)}</td><td class="kanan">${esc(r.seri)}</td>
         <td${tetap ? ` title="${esc('HS Penetapan ' + D.fmtHs(tetap))}"` : ''}>${esc(D.fmtHs(r.hs) || '-')}${tetap ? '<i class="hp-titik"></i>' : ''}</td>
         <td title="${esc(f ? (r.kodeFasNama || '').split('; ').join('\n') : 'Tanpa fasilitas')}">${esc(f || '-')}</td>
-        <td class="hp-ur" title="${esc(r.uraian || '')}">${s ? `<span class="hp-label kuning" title="${esc('Di basket, tema ' + s.tema)}">Basket</span>` : ''}${jt ? `<span class="hp-label" title="${esc(r.penetapanTeks || 'Sudah ditetapkan')}">${esc(jt)}</span>` : ''}${esc(r.uraian || '-')}</td>
+        <td class="hp-ur" title="${esc(r.uraian || '')}">${s ? `<span class="hp-label kuning" title="${esc('Di draft, tema ' + s.tema)}">Draft</span>` : ''}${jt ? `<span class="hp-label" title="${esc(r.penetapanTeks || 'Sudah ditetapkan')}">${esc(jt)}</span>` : ''}${esc(r.uraian || '-')}</td>
         ${TARIF_HS.map(([k]) => `<td class="kanan hp-trf" data-trf="${k}"></td>`).join('')}<td class="kanan hp-pot" data-pot></td></tr>`;
     };
     // tema bawaan: tema basket sendiri bila semua seri terpilih sudah di satu tema yang sama
@@ -1459,7 +1551,7 @@
         if (file) { unggahKeSeri(pilih, file); form.lepasFile(); }
         const total = pilih.reduce((n, r) => n + ((B.potensi(r) || {}).selisih || { total: 0 }).total, 0);
         selesai(pilih);
-        toast('ok', 'Tersimpan', [h.masuk && `${h.masuk} seri masuk tema ${tema}`, ubah && `${ubah} seri di basket diperbarui`].filter(Boolean).join(', ') +
+        toast('ok', 'Tersimpan', [h.masuk && `${h.masuk} seri masuk draft tema ${tema}`, ubah && `${ubah} seri di draft diperbarui`].filter(Boolean).join(', ') +
           `. HS ${D.fmtHs(isi.hs)}, total potensi ${rupiah(total)}.` + (file ? ` Dokumen: ${file.name}.` : ''));
         // buang seri yang tersimpan; sisa seri tetap dengan centangnya masing-masing
         const sisa = rows.map((r, i) => [r, pakai[i]]).filter(([r]) => !pilih.includes(r));
@@ -1569,10 +1661,11 @@
 
   // ================= Basket =================
   function halProfil() {
-    // kerangka sama dengan Browse: kartu atas (filter tema, Data History, mini dashboard yang bisa dilipat),
-    // kartu tabel, dan aksi seri tercentang (Submit, keluarkan) di bar melayang. Tanpa analisa: HS penetapan dan tarif sudah diisi
-    // di Browse sebelum seri masuk basket, jadi di sini tinggal dikirim (5 Nov 2026).
-    // Baris diwarnai per status seri (STATUS_SERI); legenda di kepala tabel berisi jumlah per status dan sekaligus saringan
+    // Basket = ruang kerja Analis 2 / Admin (Analis 1 tidak membuka menu ini; arahan atasan 5 Nov 2026). Isi = semua seri unit yang
+    // sudah dikirim Analis 1 (menunggu keputusan, Approved, SIRENA), dengan kolom Analis (pengusul). Kerangka sama dengan Browse:
+    // kartu atas (filter tema, Data History, Approval, mini dashboard), kartu tabel, dan Reject seri tercentang di bar melayang
+    // (catatan wajib; seri bebas lagi di Browse). Analis 2 tidak mengubah HS / tarif: perbaikan lewat Return di Approval / detail.
+    // Baris diwarnai per status seri (STATUS_SERI) dan sekaligus saringan
     view.innerHTML = `
       <div class="wadah">
         <section class="kartu kartu-atas" id="kartuProfil">
@@ -1591,31 +1684,29 @@
             <button class="btn btn-garis biru btn-ikon" id="pkExport" title="Export"><span class="ik">${IKON.unduh}</span></button></div>
           <div class="kartu-isi" id="tblProfil"></div>
         </section>
-        ${htmlBarPilih(`${B.boleh.ajukan() ? `<button class="biru" id="pkAjukan" title="Submit for approval"><span class="ik">${IKON.kirim}</span></button>` : ''}
-          <button id="pkKeluar" title="Remove from basket"><span class="ik">${IKON.sampah}</span></button>`)}
+        ${htmlBarPilih(`<button id="pkTolak" title="Reject"><span class="ik">${IKON.sampah}</span></button>`)}
       </div>`;
     pasangLipat($('#kartuProfil'));
 
-    // isi tabel = basket milik sendiri, termasuk yang sudah dikirim ke SIRENA; filter Tema di atas tabel (slide 2.2a)
+    // isi tabel = semua seri unit yang sudah dikirim ke Basket, termasuk yang sudah di SIRENA; filter Tema di atas tabel (slide 2.2a)
     let tema = simpanan.baca('sesi:profil-tema', '');
     if (!B.daftarTema(true).includes(tema)) tema = '';
-    // filter tema: dropdown dengan cari; ikon sampah = hapus tema (seri yang belum diproses keluar dari basket;
-    // tema yang semua serinya sedang diajukan / di SIRENA tidak bisa dihapus)
+    // filter tema: dropdown dengan cari; ikon sampah = Reject semua seri tema itu yang masih menunggu keputusan (catatan wajib)
     const pilihTema = pasangPilih($('#pkTema'), { nilai: tema, label: v => esc(v || 'All Themes'), lebar: 260,
-      daftar: () => { const bisa = B.temaBisaHapus(); return [{ v: '' }].concat(B.daftarTema(true).map(v => ({ v, hapus: bisa.has(v) }))); },
+      daftar: () => { const bisa = B.temaBisaTolak(); return [{ v: '' }].concat(B.daftarTema(true).map(v => ({ v, hapus: bisa.has(v) }))); },
       pilih: v => { aturTema(v); segarkan(); },
-      hapus: (v, segarkanDaftar) => hapusTema(v, () => {
+      hapus: (v, segarkanDaftar) => { tutupPop(); tolakSeri(B.baris().filter(r => isian(r).tema === v && bisaTolak(r)), v, () => {
         if (!$('#tblProfil')) return;
         if (tema === v && !B.daftarTema(true).includes(v)) aturTema('');
         segarkan();
         segarkanDaftar();
-      }) });
+      }); } });
     const aturTema = v => { tema = v; simpanan.tulis('sesi:profil-tema', v); if ($('#pkTema')) pilihTema.atur(v); };
     // saringan status (semua menyala bawaan), diingat peramban
     let saringSt = { ...SEMUA_STATUS(), ...simpanan.baca('sesi:profil-warna', {}) };
     const aturStatus = v => { saringSt = v; simpanan.tulis('sesi:profil-warna', v); };
     const semuaStatus = () => STATUS_SERI.every(([k]) => saringSt[k]);
-    const dataTema = () => B.baris().filter(r => !tema || isian(r).tema === tema);
+    const dataTema = () => B.baris().filter(r => isian(r).status !== 'draft' && (!tema || isian(r).tema === tema));
     const dataProfil = () => dataTema().filter(r => saringSt[statusSeri(r)]);
     // saringan status = satu ikon corong + dropdown bercentang (seperti Browse): dicentang = tampil; ikon biru penuh bila ada yang
     // dimatikan. Tanpa jumlah per status (sama dengan Flag RE / Cleansing di Browse)
@@ -1642,8 +1733,8 @@
     // tabel belum ada saat render pertama memanggil setelahRender
     let tabel = null;
     tabel = root.buatTabel($('#tblProfil'), {
-      // id dinaikkan tiap kolom bawaan berubah (profil -> basket -> basket2 -> basket3) supaya pilihan kolom lama tidak menutupi yang baru
-      id: 'basket3',
+      // id dinaikkan tiap kolom bawaan berubah (profil -> basket -> basket2 -> basket3 -> basket4) supaya pilihan kolom lama tidak menutupi yang baru
+      id: 'basket4',
       ingat: true,
       kolom: KOLOM_PROFIL,
       kolomBawaan: KOLOM_BAWAAN_PROFIL.map(k => k.key),
@@ -1664,7 +1755,7 @@
     const segarkan = () => { tabel.render(); isiStat($('#statProfil'), dataProfil()); };
     const terpilih = () => tabel.terpilih().map(id => D.PER_ID.get(id));
 
-    beritaPulih(!!tema || !semuaStatus() || tabel.adaKeadaan(), () => { aturTema(''); aturStatus(SEMUA_STATUS()); lupakanTabel('basket3'); if ($('#tblProfil')) halProfil(); });
+    beritaPulih(!!tema || !semuaStatus() || tabel.adaKeadaan(), () => { aturTema(''); aturStatus(SEMUA_STATUS()); lupakanTabel('basket4'); if ($('#tblProfil')) halProfil(); });
 
     $('#pkStatus').onclick = e => {
       const el = popSt = bukaPop(e.currentTarget, 'pop-bersih', '');
@@ -1701,26 +1792,16 @@
       toast('ok', 'Export Complete', `${rows.length.toLocaleString('en-US')} rows exported to CSV.`);
     };
 
-    // keluarkan seri tercentang dari basket (bisa satu baris saja dari sebuah tema); yang sedang diajukan / di SIRENA tetap.
-    // Tanpa popup konfirmasi: Undo di toast
-    $('#pkKeluar').onclick = () => {
-      const h = B.keluarkan(terpilih());
-      const n = Object.keys(h.hapus).length;
-      if (!n) return toast('galat', 'Cannot Remove', `${h.sisa} series are in approval or SIRENA.`);
-      tabel.kosongkanPilihan();
-      if (tema && !B.daftarTema(true).includes(tema)) aturTema('');
-      segarkan();
-      toast('ok', 'Removed', `${n} series removed from the basket` + (h.sisa ? ` (${h.sisa} in approval kept)` : '') + '.', { teks: 'Undo', fn: () => {
-        B.pulihkanTema(h.hapus);
-        if ($('#tblProfil')) segarkan();
-      } });
-    };
-
-    // Submit = ajukan ke analis senior; seri terkunci sampai disetujui, dikembalikan, atau ditolak
-    if ($('#pkAjukan')) $('#pkAjukan').onclick = () => {
-      const rows = terpilih();
-      if (!rows.length) return toast('galat', 'Cannot Submit', 'Select at least one row first.');
-      ajukanSeri(rows, () => { tabel.kosongkanPilihan(); segarkan(); });
+    // Reject seri tercentang (bisa satu baris saja dari sebuah pengajuan): catatan wajib, seri keluar dari basket dan bebas lagi
+    // di Browse; jejaknya di pengajuan (Approval). Seri yang sudah Approved / di SIRENA tidak ikut
+    $('#pkTolak').onclick = () => {
+      const rows = terpilih().filter(bisaTolak);
+      tolakSeri(rows, tema || 'Selected series', () => {
+        if (!$('#tblProfil')) return;
+        tabel.kosongkanPilihan();
+        if (tema && !B.daftarTema(true).includes(tema)) aturTema('');
+        segarkan();
+      });
     };
   }
 
@@ -1741,15 +1822,19 @@
     if (a.status === 'setuju') return btn('kirim', 'btn-biru', IKON.kirim, 'Send to SIRENA');
     return '';
   }
-  // catatan senior saat mengembalikan / menolak
+  // catatan Analis 2: Return terakhir (bila dikembalikan) dan setiap Reject (jejak seri yang dibuang, juga Reject sebagian)
   function htmlAlasan(a) {
-    const e = a && (a.status === 'kembali' || a.status === 'tolak') && a.riwayat[a.riwayat.length - 1];
-    return e && e.catatan ? `<div class="ap-alasan ${nadaAju(a)}" title="${esc(B.PERAN[e.oleh].nama + ' · ' + waktuPenuh(e.waktu))}">${avatarHtml(e.oleh, 'kecil')}<span>${esc(e.catatan)}</span></div>` : '';
+    if (!a) return '';
+    const kotak = (e, nada, awal) => `<div class="ap-alasan ${nada}" title="${esc(B.namaOleh(e.oleh) + ' · ' + waktuPenuh(e.waktu))}">${avatarHtml(e.oleh, 'kecil')}<span>${awal}${esc(e.catatan)}</span></div>`;
+    const kembali = a.status === 'kembali' ? a.riwayat.filter(e => e.aksi === 'kembalikan').pop() : null;
+    const tolak = a.riwayat.filter(e => e.aksi === 'tolak' && e.catatan);
+    return (kembali && kembali.catatan ? kotak(kembali, 'balik', '') : '') +
+      tolak.map(e => kotak(e, 'gagal', a.status === 'tolak' && tolak.length === 1 ? '' : `<b>${(e.seri || []).length} series rejected:</b> `)).join('');
   }
 
   function detailAju(a) {
     let total = 0;
-    const seri = a.seri.map(x => {
+    const seri = B.seriAju(a).map(x => {
       const r = D.PER_KUNCI.get(x.kunci);
       if (!r) return '';
       const p = B.potensi(r, x);
@@ -1802,7 +1887,7 @@
           <section class="kartu ap">
             <div class="ap-daftar">${daftar.length ? daftar.map(a => `<button class="ap-item${a.id === pilihId ? ' aktif' : ''}" data-id="${esc(a.id)}"${a.id === pilihId ? ' aria-current="true"' : ''}>
               <span class="ap-item-1"><b>${esc(a.tema)}</b>${tunggu.has(a.id) ? '<i class="ap-tunggu" title="Waiting for you"></i>' : ''}</span>
-              <span class="ap-item-2">${miniAju(a)}<span class="ap-umur" title="${esc(waktuPenuh(B.waktuAkhir(a)))}">${umur(B.waktuAkhir(a))}</span></span></button>`).join('') : kosong}</div>
+              <span class="ap-item-2">${miniAju(a)}<span class="ap-umur" title="${esc(waktuPenuh(B.waktuAkhir(a)))}">${esc(B.namaOleh(a.oleh))} · ${umur(B.waktuAkhir(a))}</span></span></button>`).join('') : kosong}</div>
             <div class="ap-kanan" id="apDetail">${pilihId ? detailAju(B.ambilAju(pilihId)) : kosong}</div>
           </section>
         </div>`;
@@ -1836,18 +1921,22 @@
   }
 
   // ================= Basket Detail =================
-  // dibuka dengan dobel-klik baris Basket (atau tombol biru): bilah progres seri, Penetapan HS satu seri (teks Indonesia seperti
-  // popup Penetapan HS), data pokok, dan aksi sesuai peran (Submit / Approve / Return / Reject / Send to SIRENA)
+  // dibuka dengan dobel-klik baris Basket / Browse mode Daftar Analisa (atau tombol biru): bilah progres seri, Penetapan HS satu seri (teks
+  // Indonesia seperti popup Penetapan HS), data pokok, dan aksi sesuai peran (Send to Basket / Approve / Return / Reject / Send to SIRENA).
+  // Analis 1 hanya membuka seri miliknya sendiri; Analis 2 / Admin semua seri unit
   function halDetail(id) {
     const r = D.PER_ID.get(id);
-    if (!r) return tidakAda('#/smart-pcc/penelitian-skpk');
+    const junior = !B.boleh.basket();
+    if (!r) return tidakAda(junior ? BERANDA : BASKET);
     const s = B.status(r);
-    const milik = s && s.milikSaya;
+    if (junior && !(s && s.unit && s.milikSaya)) { location.replace(BERANDA); return; }
+    const milik = !!(s && s.unit && (s.milikSaya || B.boleh.basket()));
     const a = milik && s.pengajuan ? B.ambilAju(s.pengajuan) : null;
-    const ubah = milik && s.status === 'basket';
-    const p = s ? B.potensi(r) : null;
+    // dokumen pendukung dan Kirim ke Basket hanya selama seri masih di draft pemiliknya
+    const ubah = milik && s.milikSaya && s.status === 'draft';
+    const p = milik ? B.potensi(r) : null;
     const DATA = [['Kode Dokumen', r.dokumen], ['HS Code', r.hs], ['Tarif', r.trfBm], ['Kode Fasilitas', r.kodeFas], ['Nama Perusahaan', r.perusahaan], ['NPWP Perusahaan', r.npwp], ['Potensi', p ? rupiah(p.selisih.total) : null]];
-    const aksi = (ubah && s.hs && B.boleh.ajukan() ? `<button class="btn btn-biru" data-dt="ajukan"><span class="ik">${IKON.kirim}</span>Submit</button>` : '') + tombolAju(a);
+    const aksi = (ubah && s.hs && B.boleh.ajukan() ? `<button class="btn btn-biru" data-dt="ajukan"><span class="ik">${IKON.kirim}</span>Send to Basket</button>` : '') + tombolAju(a);
     view.innerHTML = `
       <div class="wadah">
         <section class="kartu kartu-atas"><div class="bp-kepala">
@@ -1921,7 +2010,7 @@
         const btn = $('#lapisan .modal-kaki [data-i="1"]');
         btn.disabled = true;
         const nama = $('#dkNama').value.trim();
-        L.tambah(r.kunci, file, { nama, nomor: $('#dkNomor').value.trim(), ket: $('#dkKet').value.trim(), oleh: B.peranKini() })
+        L.tambah(r.kunci, file, { nama, nomor: $('#dkNomor').value.trim(), ket: $('#dkKet').value.trim(), oleh: B.penggunaKini().id })
           .then(() => { $('#lapisan .modal .tutup').click(); toast('ok', 'Uploaded', nama); selesai(); })
           .catch(() => { btn.disabled = false; toast('galat', 'Error', 'Upload failed'); });
         return false;
@@ -2002,7 +2091,16 @@
     const jalan = location.hash.replace(/^#/, '') || '/';
     const rute = RUTE.find(([re]) => re.test(jalan));
     if (!rute) { location.replace('#/smart-pcc/browse-pib'); return; }
-    const [re, menu, judul, fn] = rute;
+    let [re, menu, judul, fn] = rute;
+    // Analis 1 tidak membuka Basket (Basket, Approval, Data History; arahan atasan 5 Nov 2026): menu disembunyikan, alamatnya
+    // dialihkan ke Browse. Detail seri miliknya sendiri tetap bisa dibuka dari Browse mode Daftar Analisa, dengan menu aktif Browse
+    const junior = !B.boleh.basket();
+    document.querySelectorAll('.sb-daun a[data-menu="penelitian-skpk"], .sb-ikon[data-menu="penelitian-skpk"]').forEach(a => { a.hidden = junior; });
+    if (junior && menu === 'penelitian-skpk') {
+      if (fn !== RUTE[3][3]) { location.replace(BERANDA); return; }
+      menu = 'browse-pib';
+      judul = 'BROWSE';
+    }
     catatJejak(location.hash);
     $('#judulHal').textContent = judul;
     document.title = judul[0] + judul.slice(1).toLowerCase() + ' · SKPK';

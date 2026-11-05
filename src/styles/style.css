@@ -69,6 +69,8 @@ a { color: inherit; text-decoration: none; }
 .sb-ikon { width: 46px; height: 40px; display: grid; place-items: center; color: var(--teks-2); font-size: 19px; border-radius: 8px; transition: background .18s, color .18s; }
 .sb-ikon:hover { color: var(--biru); background: var(--biru-pucat); }
 .sb-ikon.aktif { color: var(--biru); background: #a9d1f4; }
+/* menu Basket disembunyikan untuk Analis 1 (app.js, jalankan); Flag RE / Cleansing disembunyikan di Browse mode Draft */
+.sb-daun a[hidden], .sb-ikon[hidden], .btn[hidden] { display: none; }
 .ciut .sidebar { width: 64px; }
 .ciut .sb-kepala, .ciut .sb-cari, .ciut .sb-nav { display: none; }
 .ciut .sb-ikon-saja { display: flex; }
