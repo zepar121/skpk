@@ -34,6 +34,7 @@
     tambah: svg('<path d="M12 5v14M5 12h14"/>'),
     sampah: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
     kurang: svg('<path d="M5 12h14"/>'),
+    regex: svg('<path d="M16 3.5v9M12.1 5.75l7.8 4.5M12.1 10.25l7.8-4.5"/><circle cx="6.5" cy="17.5" r="2.5"/>'),
     kembali: svg('<path d="M19 12H5M11 6l-6 6 6 6"/>'),
     petir: svg('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>'),
     cekLingkaran: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>'),
@@ -551,22 +552,25 @@
   // kolom Status Basket: nama tahap saja, berwarna; catatan / tanggal kirim di tooltip, tautan ke pengajuannya di Approval
   function namaStatus(s) {
     const t = B.tahapSeri(s);
-    return !t ? null : t === 'tetap' && s.kembali ? 'Returned' : t === 'tolak' ? 'Rejected' : B.NAMA_TAHAP[t];
+    return !t ? null : t === 'basket' && s.kembali ? 'Returned' : t === 'tolak' ? 'Rejected' : B.NAMA_TAHAP[t];
   }
   function teksStatus(s) {
     const t = B.tahapSeri(s);
     if (!t) return '-';
-    const nada = t === 'tolak' ? 'gagal' : t === 'tetap' && s.kembali ? 'balik' : t === 'sirena' ? 'kirim' : t === 'basket' ? 'awal' : '';
-    const ket = s.sirena && t === 'sirena' ? s.sirena.nomor + ' · ' + tgl(s.sirena.waktu) : t === 'tetap' && s.kembali ? s.kembali.catatan : '';
+    const kembali = t === 'basket' && s.kembali;
+    const nada = t === 'tolak' ? 'gagal' : kembali ? 'balik' : t === 'sirena' ? 'kirim' : t === 'basket' ? 'awal' : '';
+    const ket = s.sirena && t === 'sirena' ? s.sirena.nomor + ' · ' + tgl(s.sirena.waktu) : kembali ? s.kembali.catatan : '';
     const isi = `<span class="st-teks ${nada}"${ket ? ` title="${esc(ket)}"` : ''}>${esc(namaStatus(s))}</span>`;
     const id = s.pengajuan || (s.kembali && s.kembali.id);
     return id && s.milikSaya ? `<a class="mt-link" href="${hrefAju(id)}">${isi}</a>` : isi;
   }
+  // hasil analisa (Browse) satu seri: HS penetapan, tarif akhir, pungutan lain
+  const an = r => B.analisa(r) || {};
   const KP = {
-    hsTetap: { key: 'hsTetap', label: 'HS Penetapan', saring: 'teks', lebar: 120, nilai: r => isian(r).hs || null, isi: r => t(isian(r).hs) },
-    trfTetap: { key: 'trfTetap', label: 'Tarif Penetapan', tipe: 'angka', saring: 'teks', lebar: 140, nilai: r => isian(r).bm, isi: r => (isian(r).bm == null ? '-' : isian(r).bm + '%') + (isian(r).lain && isian(r).lain.length ? ` <span class="ada-tip" title="${esc(isian(r).lain.map(x => x.jenis + ' ' + x.tarif + '%').join(', '))}">+${isian(r).lain.length}</span>` : '') },
-    ppnTetap: { key: 'ppnTetap', label: 'Tarif PPN Penetapan', tipe: 'angka', saring: 'teks', lebar: 140, nilai: r => isian(r).ppn ?? null, isi: r => (isian(r).ppn == null ? '-' : isian(r).ppn + '%') },
-    pphTetap: { key: 'pphTetap', label: 'Tarif PPh Penetapan', tipe: 'angka', saring: 'teks', lebar: 140, nilai: r => isian(r).pph ?? null, isi: r => (isian(r).pph == null ? '-' : isian(r).pph + '%') },
+    hsTetap: { key: 'hsTetap', label: 'HS Penetapan', saring: 'teks', lebar: 120, nilai: r => an(r).hs || null, isi: r => t(an(r).hs) },
+    trfTetap: { key: 'trfTetap', label: 'Tarif Penetapan', tipe: 'angka', saring: 'teks', lebar: 140, nilai: r => an(r).bm ?? null, isi: r => (an(r).bm == null ? '-' : an(r).bm + '%') + (an(r).lain && an(r).lain.length ? ` <span class="ada-tip" title="${esc(an(r).lain.map(x => x.jenis + ' ' + x.tarif + '%').join(', '))}">+${an(r).lain.length}</span>` : '') },
+    ppnTetap: { key: 'ppnTetap', label: 'Tarif PPN Penetapan', tipe: 'angka', saring: 'teks', lebar: 140, nilai: r => an(r).ppn ?? null, isi: r => (an(r).ppn == null ? '-' : an(r).ppn + '%') },
+    pphTetap: { key: 'pphTetap', label: 'Tarif PPh Penetapan', tipe: 'angka', saring: 'teks', lebar: 140, nilai: r => an(r).pph ?? null, isi: r => (an(r).pph == null ? '-' : an(r).pph + '%') },
     potensi: { key: 'potensi', label: 'Potensi', tipe: 'angka', saring: 'teks', lebar: 150, nilai: r => { const p = B.potensi(r); return p ? Math.round(p.selisih.total) : null; },
       isi: r => { const p = B.potensi(r); return p ? `<span title="${esc(`BM ${rupiah(p.selisih.bm)}, PPN ${rupiah(p.selisih.ppn)}, PPh ${rupiah(p.selisih.pph)}`)}">${rupiah(p.selisih.total)}</span>` : '-'; } },
     tema: { key: 'temaBasket', label: 'Tema Analisis', saring: 'teks', lebar: 190, nilai: r => isian(r).tema, isi: r => t(isian(r).tema) },
@@ -577,8 +581,9 @@
   };
 
   // Nama Perusahaan dan NPWP Perusahaan langsung setelah delapan kolom urutan rapat (Excel 3), supaya terlihat tanpa menggeser jauh
+  // hasil analisa (HS Penetapan, Tarif Penetapan, Potensi) langsung setelah HS Code dan Tarif pemberitahuan (analisa di Browse, 5 Nov 2026)
   const KOLOM_BAWAAN_BROWSE = [KB.kantor, KB.noPib, KB.tgl, KB.seri, KB.fas, KB.uraian, KB.harga, K.jalur, K.perusahaan, K.npwp,
-    K.tipe, K.merk, K.hs, K.trfBm, K.aju, K.pemasok, K.satuan, K.jmlSatuan, K.bmBayar, K.negara, K.devisa, KB.reInk, KB.rePerluasan, KB.reSka, KB.penetapan, KB.basket];
+    K.tipe, K.merk, K.hs, K.trfBm, KP.hsTetap, KP.trfTetap, KP.potensi, K.aju, K.pemasok, K.satuan, K.jmlSatuan, K.bmBayar, K.negara, K.devisa, KB.reInk, KB.rePerluasan, KB.reSka, KB.penetapan, KB.basket];
 
   // ---------- semua kolom data sumber jenis dokumen aktif + kolom tambahan SKPK ----------
   // Kolom Excel yang sudah terwakili kolom inti / kolom khusus tidak muncul dua kali; sisanya tampil dengan nama Excel, tersembunyi
@@ -607,8 +612,9 @@
   // Basket bisa berisi beberapa jenis dokumen: kolom khusus tetap tersedia (kelompok per jenis di Columns), kosong untuk jenis lain
   // lebar secukupnya supaya nama kolom tidak terpotong
   const LEBAR_BASKET = { temaBasket: 170, perusahaan: 150, uraian: 160, dokumen: 135, noPib: 145, kantorKode: 120, tglDaftar: 150, statusBasket: 110, hs: 95, trfBm: 75, hsTetap: 125, trfTetap: 135 };
-  // Tema Analisis paling kiri supaya tiap seri jelas masuk tema apa
-  const KOLOM_BAWAAN_PROFIL = [KP.tema, K.perusahaan, K.uraian, K.dokumen, K.noPib, K.kantor, K.tglDaftar, KP.status, K.hs, K.trfBm, KP.hsTetap, KP.trfTetap];
+  // Tema Analisis paling kiri supaya tiap seri jelas masuk tema apa; lalu dokumen (Kode Kantor, Nomor, Tanggal, Seri), barang,
+  // hasil analisa dari Browse, dan Status paling belakang (komentar pengguna 4 Nov 2026)
+  const KOLOM_BAWAAN_PROFIL = [KP.tema, K.kantor, K.noPib, K.tglDaftar, K.seri, K.uraian, K.perusahaan, K.hs, K.trfBm, KP.hsTetap, KP.trfTetap, KP.potensi, KP.status];
   // Flag RE (Inkonsistensi, Perluasan, SKA) dipindah ke Browse (slide 1c)
   const KOLOM_PROFIL = [KP.tema, K.uraian, K.tipe, K.merk, K.hs, K.hsSaran, K.trfBm, K.trfSaran, KP.hsTetap, KP.trfTetap, KP.ppnTetap, KP.pphTetap, KP.potensi, KP.status, K.skep, K.perusahaan, K.npwp, K.kantor, K.noPib,
     K.dokumen, K.aju, K.tglDaftar, K.waktuRekam, K.pemasok, K.seri, K.jmlSatuan, K.satuan, K.bmBayar, K.negara, K.devisa, K.jalur,
@@ -622,9 +628,13 @@
   // ---------- Advance Filter (meniru Advanced filter To-Be) ----------
   // Tiap baris kondisi = satu kolom (semua kolom PIB + tambahan), operator sesuai tipe kolom, nilai kedua untuk "di antara".
   // DAN dihitung lebih dulu daripada ATAU. Teks: * = karakter apa saja, ? = satu karakter; huruf besar/kecil diabaikan.
+  // Regex = tombol ikon per kondisi di luar kotak isian (5 Nov 2026), hanya untuk kolom teks: regex membaca teks, sedangkan angka dan
+  // tanggal sudah punya operator sendiri (>, between, before / after) dan isi mentahnya berbeda dari yang tampil. Operator tetap berlaku
+  // sehingga user cukup menulis inti pola (contains = di mana saja, equals = ^(...)$, begins / ends with = ^(...) / (...)$, "does not" =
+  // kebalikannya; pembalikan sulit ditulis sebagai regex murni). Pola tidak sah = kotak nilai dan tombol merah.
   const OP = {
     teks: { mengandung: 'contains', tidakMengandung: 'does not contain', sama: 'equals', tidakSama: 'does not equal', awal: 'begins with', tidakAwal: 'does not begin with',
-      akhir: 'ends with', tidakAkhir: 'does not end with', regex: 'matches regex', kosong: 'is empty', isi: 'is not empty' },
+      akhir: 'ends with', tidakAkhir: 'does not end with', kosong: 'is empty', isi: 'is not empty' },
     angka: { sama: '=', tidakSama: '≠', lebih: '>', lebihSama: '≥', kurang: '<', kurangSama: '≤', antara: 'between', kosong: 'is empty', isi: 'is not empty' },
     tanggal: { sama: 'on', tidakSama: 'not on', sebelum: 'before', sesudah: 'after', antara: 'between', kosong: 'is empty', isi: 'is not empty' }
   };
@@ -633,12 +643,24 @@
   const OP_AWAL = { teks: 'mengandung', angka: 'lebih', tanggal: 'sesudah' };
   const TANPA_NILAI = new Set(['kosong', 'isi']);
   const kondisiBaru = (kolom = 'uraian', gabung = 'DAN') => ({ kolom, op: OP_AWAL[(PER_KOLOM_BROWSE.get(kolom) || {}).tipe || 'teks'], v1: '', v2: '', gabung });
+  // pola regex dari nilai + operator; galat bila regex tidak sah
+  const MODE_TEKS = { sama: 'penuh', tidakSama: 'penuh', awal: 'awal', tidakAwal: 'awal', akhir: 'akhir', tidakAkhir: 'akhir' };
+  const polaRegex = (v, op) => {
+    const m = MODE_TEKS[op] || 'bebas';
+    return new RegExp(m === 'penuh' ? '^(?:' + v + ')$' : m === 'awal' ? '^(?:' + v + ')' : m === 'akhir' ? '(?:' + v + ')$' : v, 'i');
+  };
+  const regexSah = v => { try { new RegExp(v); return true; } catch { return false; } };
 
   // Advance Filter dan checkbox flag RE diingat peramban (sesi:browse2); tabelnya mengingat sendiri (tabel:browse)
   // bersih = cleansing: { notul, penul, audit, expired, basket, sirena } yang dicentang disembunyikan dari Browse
   const awalBrowse = () => ({ baris: [kondisiBaru()], aktif: null, re: { semua: true, inkonsistensi: false, perluasan: false, ska: false }, bersih: {} });
   const kondisiSah = b => Array.isArray(b) && b.length > 0 && b.every(c => c && PER_KOLOM_BROWSE.has(c.kolom) && OP[PER_KOLOM_BROWSE.get(c.kolom).tipe][c.op] && 'v1' in c);
   const tersimpan = simpanan.baca('sesi:browse2', {});
+  // sesi lama: operator "matches regex" -> contains + regex; sakelar Regex global -> regex di tiap kondisi
+  const rxLama = (b, global) => { if (Array.isArray(b)) for (const c of b) if (c) { if (c.op === 'regex') Object.assign(c, { op: 'mengandung', regex: true }); else if (global) c.regex = true; } };
+  rxLama(tersimpan.baris, tersimpan.regex);
+  if (tersimpan.aktif) rxLama(tersimpan.aktif.baris, tersimpan.aktif.regex);
+  delete tersimpan.regex;
   const browse = Object.assign(awalBrowse(), tersimpan);
   if (!kondisiSah(browse.baris)) browse.baris = [kondisiBaru()];
   if (browse.aktif && !kondisiSah(browse.aktif.baris)) browse.aktif = null;
@@ -663,7 +685,7 @@
       const tanpa = TANPA_NILAI.has(c.op);
       const v1 = String(c.v1 || '').trim(), v2 = String(c.v2 || '').trim();
       if (!tanpa && !v1 && !v2) continue;
-      const x = { k, op: c.op, gabung: out.length ? c.gabung : 'DAN', v1, v2 };
+      const x = { k, op: c.op, gabung: out.length ? c.gabung : 'DAN', v1, v2, regex: j === 'teks' && !!c.regex };
       if (!tanpa) {
         const baca = v => (j === 'angka' ? keAngka(v) : j === 'tanggal' ? (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null) : v || null);
         x.a = baca(v1);
@@ -673,12 +695,9 @@
           continue;
         }
         if (j === 'teks') {
-          if (c.op === 'regex') {
-            try { x.re = new RegExp(v1, 'i'); } catch { if (ketat) return { galat: `Invalid regex in condition ${i + 1}.` }; continue; }
-          } else {
-            const mode = { sama: 'penuh', tidakSama: 'penuh', awal: 'awal', tidakAwal: 'awal', akhir: 'akhir', tidakAkhir: 'akhir' }[c.op] || 'bebas';
-            x.re = polaWildcard(v1, mode);
-          }
+          if (x.regex) {
+            try { x.re = polaRegex(v1, c.op); } catch { if (ketat) return { galat: `Invalid regex in condition ${i + 1} (${k.label}).` }; continue; }
+          } else x.re = polaWildcard(v1, MODE_TEKS[c.op] || 'bebas');
         }
       }
       out.push(x);
@@ -765,13 +784,15 @@
     E.unduh(E.xlsx(kols, isi, { sheet: judul, namaMeta: 'Keterangan', meta: [['Sumber', 'SKPK v2 - ' + judul], ['Jumlah baris', rows.length], ['Waktu export', new Date().toLocaleString('id-ID')]] }), nama, E.TIPE.xlsx);
   }
 
-  // jenis dokumen: dropdown seperti To-Be; jenis yang datanya belum ada memberi toast dan pilihan kembali
-  const JENIS_DOK = ['bc20', 'bc23', 'bc25', 'bc28', 'bc30'];
+  // jenis dokumen: dropdown seperti To-Be; jenis yang datanya belum ada memberi toast dan pilihan kembali.
+  // BC 2.3 tidak dipakai; PPFTZ-01 TLDDP belum ada di mesin (dokumen.js salinan To-Be), namanya dari sini
+  const JENIS_DOK = ['bc20', 'bc25', 'bc28', 'bc30', 'ppftz01'];
+  const DOK_TAMBAHAN = { ppftz01: { label: 'PPFTZ-01 TLDDP', nama: 'Pemberitahuan Pabean FTZ: pengeluaran ke Tempat Lain Dalam Daerah Pabean' } };
   function pilihDokumen() {
     const S = root.SKPK_DOKUMEN;
     if (!S) return '';
     return `<select class="sel pilih-dok" id="pilihDok" aria-label="Document type">${JENIS_DOK.map(k => {
-      const d = S.SEMUA.find(x => x.kode === k) || { label: k, nama: '' };
+      const d = S.SEMUA.find(x => x.kode === k) || DOK_TAMBAHAN[k] || { label: k, nama: '' };
       return `<option value="${k}"${k === S.AKTIF ? ' selected' : ''}${S.ADA.includes(k) ? '' : ' data-kosong="1"'} title="${esc(d.nama)}">${esc(d.label)}</option>`;
     }).join('')}</select>`;
   }
@@ -821,7 +842,6 @@
             <div class="af-utama">
               <div class="af-daftar" id="afBaris"></div>
               <div class="af-tombol">
-                <span class="af-hitung" id="afHitung" aria-live="polite"></span>
                 <button class="btn btn-garis biru btn-ikon" id="afTambah" title="Add condition" aria-label="Add condition"><span class="ik">${IKON.tambah}</span></button>
                 <button class="btn btn-garis btn-ikon" id="afReset" title="Reset" aria-label="Reset"><span class="ik">${IKON.segar}</span></button>
                 <button class="btn btn-biru btn-ikon btn-titik" id="afCari" title="Search" aria-label="Search"><span class="ik">${IKON.cari}</span></button>
@@ -834,30 +854,23 @@
             <span id="chipLihat"></span>
             <button class="btn btn-garis biru btn-ikon btn-bersih" id="btnRe" aria-haspopup="dialog" aria-expanded="false"><span class="ik">${IKON.bendera}</span></button>
             <button class="btn btn-garis biru btn-ikon btn-bersih" id="btnBersih" aria-haspopup="dialog" aria-expanded="false"><span class="ik">${IKON.sapu}</span></button>
-            <button class="btn btn-garis biru btn-ikon btn-kolom" id="btnKolom" aria-haspopup="dialog" aria-expanded="false" title="Columns"><span class="ik">${IKON.kolom}</span></button>
             <button class="btn btn-garis biru btn-ikon" id="afExport" title="Export"><span class="ik">${IKON.unduh}</span></button></div>
           <div class="kartu-isi" id="tblBrowse"></div>
         </section>
-        ${htmlBarPilih(`<button class="biru" id="btnTema" aria-haspopup="dialog" title="Save to theme"><span class="ik">${IKON.penanda}</span></button>`)}
+        ${htmlBarPilih(`<button class="biru" id="btnHs" aria-haspopup="dialog" title="Penetapan HS"><span class="ik">${IKON.pena}</span></button>`)}
       </div>`;
 
     isiStat($('#statBrowse'), dataBrowse());
 
-    // --- chip flag RE: jumlah dihitung dari baris lolos Advance Filter ---
-    // --- flag RE: tombol menyala selama ada flag dicentang; jumlah per flag dihitung dari baris lolos Cleansing + Advance Filter ---
+    // --- flag RE: tombol menyala selama ada flag dicentang. Tanpa jumlah baris per flag: menghitungnya berarti menyaring ulang
+    //     seluruh data tiap kali dropdown dibuka / diubah (permintaan 5 Nov 2026: hapus hitungan yang memberatkan) ---
     const flagAktif = () => (pilihRe.semua ? [] : FLAG_RE.filter(k => pilihRe[k]));
     let popRe = null;
     function isiPopRe(el) {
-      const awal = D.ROWS.filter(lolosBersih);
-      const dasar = browse.aktif ? saringKondisi(awal, siapkanKondisi(browse.aktif.baris, false).kondisi) : awal;
-      const n = Object.fromEntries(FLAG_RE.map(k => [k, 0]));
-      for (const r of dasar) for (const k of FLAG_RE) if (r.flag[k]) n[k]++;
       const aktif = flagAktif();
       el.innerHTML = `
-        <div class="pb-baris pb-kepala"><label><input type="checkbox" data-semua ${aktif.length === FLAG_RE.length ? 'checked' : ''}><b>Flag RE</b></label>
-          <b class="pb-n">${(aktif.length ? dasar.filter(lolosRe).length : dasar.length).toLocaleString('id-ID')}</b></div>
-        ${RE.map(([k, l, w]) => `<div class="pb-baris" title="Flag RE ${l}"><label><input type="checkbox" data-k="${k}" ${aktif.includes(k) ? 'checked' : ''}><i class="pb-titik ${w}"></i>${l}</label>
-          <span class="pb-n">${n[k].toLocaleString('id-ID')}</span></div>`).join('')}`;
+        <div class="pb-baris pb-kepala"><label><input type="checkbox" data-semua ${aktif.length === FLAG_RE.length ? 'checked' : ''}><b>Flag RE</b></label></div>
+        ${RE.map(([k, l, w]) => `<div class="pb-baris" title="Flag RE ${l}"><label><input type="checkbox" data-k="${k}" ${aktif.includes(k) ? 'checked' : ''}><i class="pb-titik ${w}"></i>${l}</label></div>`).join('')}`;
       el.querySelector('[data-semua]').indeterminate = aktif.length > 0 && aktif.length < FLAG_RE.length;
     }
     function gambarRe() {
@@ -884,39 +897,48 @@
         const tanpa = TANPA_NILAI.has(c.op);
         const atribut = j === 'tanggal' ? 'type="date"' : j === 'angka' ? 'type="text" inputmode="decimal"' : 'type="text"';
         const kotak = (f, label) => `<input class="inp" ${atribut} data-i="${i}" data-f="${f}" value="${esc(c[f])}" aria-label="${label} ${i + 1}" autocomplete="off">`;
+        // kolom teks: tombol regex di luar kotak nilai (sebelah tombol hapus); nyala = huruf monospace, pola tidak sah = merah.
+        // Kolom angka / tanggal dan operator tanpa nilai: tempat tombol dibiarkan kosong supaya baris tetap sejajar
+        const bisaRx = j === 'teks' && !tanpa;
+        const rx = bisaRx && !!c.regex;
+        const salah = rx && c.v1 && !regexSah(c.v1);
+        const kotakTeks = () => `<input class="inp${rx ? ' rx' : ''}${salah ? ' galat' : ''}" type="text" data-i="${i}" data-f="v1" value="${esc(c.v1)}" aria-label="Value ${i + 1}" autocomplete="off"${rx ? ' spellcheck="false"' : ''}>`;
+        const tombolRx = bisaRx ? `<button type="button" class="btn btn-garis biru btn-ikon af-rx${salah ? ' galat' : ''}" data-regex="${i}" aria-pressed="${rx}" title="Regular expression" aria-label="Regular expression, condition ${i + 1}"><span class="ik">${IKON.regex}</span></button>`
+          : '<span class="af-rx-sela" aria-hidden="true"></span>';
         return (i ? `<div class="af-gabung" role="radiogroup" aria-label="Join ${i + 1}">${['DAN', 'ATAU'].map(g => `<label class="${c.gabung === g ? 'aktif' : ''}"><input type="radio" name="afGabung${i}" value="${g}" data-i="${i}" data-f="gabung" ${c.gabung === g ? 'checked' : ''}>${GABUNG[g]}</label>`).join('')}</div>` : '') +
           `<div class="af-kondisi">
             <select class="sel" data-i="${i}" data-f="kolom" aria-label="Column ${i + 1}">${opsiKolom(c.kolom)}</select>
             <select class="sel" data-i="${i}" data-f="op" aria-label="Operator ${i + 1}">${Object.entries(OP[j]).map(([v, l]) => `<option value="${v}" ${v === c.op ? 'selected' : ''}>${l}</option>`).join('')}</select>
-            ${tanpa ? '<span class="inp" style="flex:1;visibility:hidden"></span>' : kotak('v1', 'Value')}
+            ${tanpa ? '<span class="inp" style="flex:1;visibility:hidden"></span>' : j === 'teks' ? kotakTeks() : kotak('v1', 'Value')}
             ${c.op === 'antara' ? `<span class="af-sd">and</span>${kotak('v2', 'Upper bound')}` : ''}
+            ${tombolRx}
             <button class="btn btn-garis btn-ikon" data-hapus="${i}" title="Remove condition" aria-label="Remove condition ${i + 1}" ${browse.baris.length === 1 ? 'disabled' : ''}><span class="ik">${IKON.kurang}</span></button>
           </div>`;
       }).join('');
       if (fokus != null) { const el = wadahAf.querySelector(`[data-i="${fokus}"][data-f="v1"]`) || wadahAf.querySelector(`[data-i="${fokus}"][data-f="op"]`); if (el) el.focus(); }
       pratinjauAf();
     }
-    // jumlah data yang cocok (sebelum saringan kolom tabel)
-    let jedaAf = 0;
+    // titik di Search selama isi form berbeda dari saringan yang sedang berlaku. Tanpa jumlah data cocok: menghitungnya
+    // menyaring ulang seluruh data di tiap ketikan (permintaan 5 Nov 2026)
     function pratinjauAf() {
       $('#afGalat').hidden = true;
       const { kondisi } = siapkanKondisi(browse.baris, false);
-      // titik di Search selama isi form berbeda dari saringan yang sedang berlaku
-      const jejak = ks => JSON.stringify(ks.map(x => [x.k.key, x.op, x.gabung, x.v1, x.v2]));
+      const jejak = ks => JSON.stringify(ks.map(x => [x.k.key, x.op, x.gabung, x.v1, x.v2, x.regex]));
       const belum = jejak(kondisi) !== jejak(browse.aktif ? siapkanKondisi(browse.aktif.baris, false).kondisi : []);
       $('#afCari').classList.toggle('aktif', belum);
       $('#afCari').title = belum ? 'Search (not applied)' : 'Search';
-      clearTimeout(jedaAf);
-      jedaAf = setTimeout(() => {
-        if (!$('#afHitung')) return;
-        const n = saringKondisi(dasarBrowse(), kondisi).length;
-        $('#afHitung').innerHTML = kondisi.length ? `<b>${n.toLocaleString('id-ID')}</b> matches` : '';
-      }, 120);
     }
     wadahAf.addEventListener('input', e => {
       const f = e.target.dataset.f;
       if (f !== 'v1' && f !== 'v2') return;
-      browse.baris[e.target.dataset.i][f] = e.target.value;
+      const c = browse.baris[e.target.dataset.i];
+      c[f] = e.target.value;
+      if (e.target.classList.contains('rx')) {
+        const salah = !!c.v1 && !regexSah(c.v1);
+        e.target.classList.toggle('galat', salah);
+        const b = wadahAf.querySelector(`[data-regex="${e.target.dataset.i}"]`);
+        if (b) b.classList.toggle('galat', salah);
+      }
       simpanBrowse();
       pratinjauAf();
     });
@@ -940,6 +962,14 @@
       simpanBrowse();
     });
     wadahAf.addEventListener('click', e => {
+      const rb = e.target.closest('[data-regex]');
+      if (rb) {
+        const i = Number(rb.dataset.regex);
+        browse.baris[i].regex = !browse.baris[i].regex;
+        simpanBrowse();
+        gambarAf(i);
+        return;
+      }
       const h = e.target.closest('[data-hapus]');
       if (!h || h.disabled) return;
       browse.baris.splice(Number(h.dataset.hapus), 1);
@@ -956,18 +986,11 @@
     };
     gambarAf();
 
-    // --- simpan ke tema = turunkan seri tercentang ke basket (catatan rapat no. 1; slide 2) lewat panel kanan ---
+    // --- Penetapan HS + simpan ke tema (catatan rapat no. 1, 5, 6; slide 2) = satu popup dari bar melayang ---
     // tabel belum ada saat render pertama memanggil cekAn
     let tabel = null;
-    const cekAn = () => {
-      const n = tabel ? tabel.terpilih().length : 0;
-      aturBarPilih(n);
-      if (!$('#laciTema')) return;
-      $('#laciTema .laci-n').textContent = n.toLocaleString('en-US');
-      $('#anSimpan').disabled = !(n && $('#anTema').value.trim() && $('#anJenis').value.trim());
-    };
+    const cekAn = () => aturBarPilih(tabel ? tabel.terpilih().length : 0);
     pasangLipat($('#kartuBrowse'));
-    const jmlKolom = () => { if (tabel && $('#btnKolom')) $('#btnKolom').title = `Columns ${tabel.kolomTampil().length}/${KOLOM_BROWSE.length}`; };
 
     tabel = root.buatTabel($('#tblBrowse'), {
       id: 'browse',
@@ -979,19 +1002,12 @@
       stripRingkas: true,
       kelasBaris: kelasWarna,
       setelahRender: () => cekAn(),
-      saatKolomBerubah: jmlKolom,
-      ringkas: rows => {
-        const st = D.statistik(rows);
-        return `<b>${st.pib.toLocaleString('id-ID')}</b> ${esc(D.DOK.satuan)}<i>·</i><b>${st.entitas.toLocaleString('id-ID')}</b> NPWP<i>·</i><b>${rupiah(st.devisa)}</b>`;
-      },
       aksi: () => `<button class="btn-aksi biru" data-aksi="trx" title="Transaction data">${IKON.dok}</button><button class="btn-aksi kuning" data-aksi="perusahaan" title="Company profile">${IKON.gedung}</button>`,
       klikAksi(nama, r) {
         if (nama === 'trx') location.hash = '#/smart-pcc/browse-pib/transaksional/' + r.id;
         else modalPerusahaan(r);
       }
     });
-    jmlKolom();
-    $('#btnKolom').onclick = e => tabel.bukaPilihKolom(e.currentTarget);
 
     beritaPulih(!!browse.aktif || !pilihRe.semua || bersihAktif().length > 0 || tabel.adaKeadaan(), () => {
       aturBrowse(awalBrowse());
@@ -1064,19 +1080,8 @@
     };
 
     // --- cleansing: dropdown berisi kategori bercentang (Notul, Penul, Audit, Expired, Basket, SIRENA) ---
-    // ikon mata per kategori = lihat baris yang dibuang kategori itu; chip di kiri tombol = keluar dari tampilan itu
-    const hitungBersih = () => {
-      const n = Object.fromEntries(BERSIH.map(([k]) => [k, 0]));
-      let semua = 0;
-      const aktif = bersihAktif();
-      for (const r of D.ROWS) {
-        let kena = false;
-        for (const [k] of BERSIH) if (kenaBersih(r, k)) { n[k]++; if (aktif.includes(k)) kena = true; }
-        if (kena) semua++;
-      }
-      return { n, semua };
-    };
-    const fmt = n => n.toLocaleString('id-ID');
+    // ikon mata per kategori = lihat baris yang dibuang kategori itu; chip di kiri tombol = keluar dari tampilan itu.
+    // Tanpa jumlah baris per kategori (menghitungnya = memeriksa ulang seluruh data tiap dropdown dibuka / diubah)
     function gambarBersih() {
       const b = $('#btnBersih');
       const aktif = bersihAktif();
@@ -1086,7 +1091,7 @@
       const c = $('#chipLihat');
       if (!lihatBersih) { c.innerHTML = ''; return; }
       const nama = lihatBersih === 'semua' ? 'Excluded' : NAMA_BERSIH[lihatBersih];
-      c.innerHTML = `<button type="button" class="chip-lihat" title="Back to cleansed data" aria-label="Exit view: ${nama}"><span class="ik">${IKON.mata}</span>${nama}<b>${fmt(tabel.terfilter().length)}</b><span class="ik">${IKON.silang}</span></button>`;
+      c.innerHTML = `<button type="button" class="chip-lihat" title="Back to cleansed data" aria-label="Exit view: ${nama}"><span class="ik">${IKON.mata}</span>${nama}<span class="ik">${IKON.silang}</span></button>`;
     }
     function segarBersih() {
       simpanBrowse();
@@ -1098,15 +1103,12 @@
       pratinjauAf();
     }
     function isiPopBersih(el) {
-      const { n, semua } = hitungBersih();
       const aktif = bersihAktif();
       const mata = (k, label) => `<button type="button" class="pb-mata${lihatBersih === k ? ' aktif' : ''}" data-lihat="${k}" title="View ${label}" aria-label="View ${label}" aria-pressed="${lihatBersih === k}"><span class="ik">${IKON.mata}</span></button>`;
       const semuaCentang = aktif.length === BERSIH.length;
       el.innerHTML = `
-        <div class="pb-baris pb-kepala"><label><input type="checkbox" data-semua ${semuaCentang ? 'checked' : ''}><b>Cleansing</b></label>
-          <b class="pb-n">${fmt(semua)}</b>${mata('semua', 'all excluded')}</div>
-        ${BERSIH.map(([k, l, tip, w]) => `<div class="pb-baris" title="${esc(tip)}"><label><input type="checkbox" data-k="${k}" ${browse.bersih[k] ? 'checked' : ''}><i class="pb-titik ${w}"></i>${l}</label>
-          <span class="pb-n">${fmt(n[k])}</span>${mata(k, l)}</div>`).join('')}`;
+        <div class="pb-baris pb-kepala"><label><input type="checkbox" data-semua ${semuaCentang ? 'checked' : ''}><b>Cleansing</b></label>${mata('semua', 'all excluded')}</div>
+        ${BERSIH.map(([k, l, tip, w]) => `<div class="pb-baris" title="${esc(tip)}"><label><input type="checkbox" data-k="${k}" ${browse.bersih[k] ? 'checked' : ''}><i class="pb-titik ${w}"></i>${l}</label>${mata(k, l)}</div>`).join('')}`;
       const s = el.querySelector('[data-semua]');
       s.indeterminate = aktif.length > 0 && !semuaCentang;
     }
@@ -1140,100 +1142,17 @@
       segarBersih();
     };
 
-    $('#btnTema').onclick = () => bukaTema(tabel, cekAn);
+    // analisa (HS penetapan, tarif, potensi) dan tema dalam satu popup; seri yang tersimpan dilepas centangnya
+    $('#btnHs').onclick = () => {
+      const rows = tabel.terpilih().map(id => D.PER_ID.get(id)).filter(Boolean);
+      bukaPenetapanHs(rows, simpan => {
+        if (!$('#tblBrowse')) return;
+        const id = new Set(simpan.map(r => r.id));
+        if (!tabel.lepasPilihan(x => id.has(x))) tabel.render();
+      });
+    };
     $('#btnBatalPilih').onclick = () => tabel.kosongkanPilihan();
     cekAn();
-  }
-
-  // panel kanan Save to theme: tabel tetap bisa dicentang selama panel terbuka; Esc / pindah halaman = tutup
-  function bukaTema(tabel, cekAn) {
-    if ($('#laciTema')) return $('#anTema').focus();
-    const el = document.createElement('aside');
-    el.className = 'laci';
-    el.id = 'laciTema';
-    el.setAttribute('role', 'dialog');
-    el.setAttribute('aria-label', 'Save to theme');
-    el.innerHTML = `
-      <div class="laci-kepala"><span class="ik">${IKON.penanda}</span><b class="laci-n"></b>
-        <button class="btn btn-biru btn-ikon" id="anSimpan" title="Save" disabled><span class="ik">${IKON.simpan}</span></button>
-        <button class="tutup" aria-label="Close">×</button></div>
-      <div class="laci-isi">
-        <button class="sel pilih" id="anTema" aria-label="Theme name"></button>
-        <button class="sel pilih" id="anJenis" aria-label="Theme type"></button>
-        <textarea class="inp" id="anTeks" placeholder="Analysis" aria-label="Analysis"></textarea>
-      </div>`;
-    const tutup = () => {
-      el.remove();
-      document.removeEventListener('keydown', kunci);
-      window.removeEventListener('hashchange', tutup);
-      $('#btnTema')?.classList.remove('aktif');
-    };
-    const rapi = v => v.trim().replace(/\s+/g, ' ');
-    const turunkan = (rows, lewatiDitetapkan) => {
-      const tema = rapi($('#anTema').value);
-      const h = B.tambah(rows, tema, rapi($('#anJenis').value), $('#anTeks').value.trim(), { lewatiDitetapkan });
-      const lewat = [h.expired && `${h.expired} expired (rejected)`, h.penetapan && `${h.penetapan} already assessed`, h.terkunci && `${h.terkunci} in another unit's basket`,
-        h.sudah && `${h.sudah} already in your basket`].filter(Boolean).join(', ');
-      if (h.masuk) toast('ok', 'Success', `${h.masuk} series added to the basket, theme ${tema}` + (h.ulang ? ` (${h.ulang} re-assessment)` : '') + '.' + (lewat ? ` Skipped: ${lewat}.` : ''));
-      else toast('galat', 'Nothing Added', `Skipped: ${lewat}.`);
-      tutup();
-      tabel.kosongkanPilihan();
-    };
-    // seri expired (lewat 2 tahun) langsung ditolak tanpa pertanyaan; seri yang sudah ditetapkan masih boleh ditetapkan ulang
-    // (mis. 0% -> 5% -> 10%): peringatan, bukan tolak
-    const simpan = () => {
-      const rows = tabel.terpilih().map(id => D.PER_ID.get(id)).filter(Boolean);
-      const bisa = rows.filter(r => !B.kadaluarsa(r));
-      if (!bisa.length) {
-        tabel.lepasPilihan(id => B.kadaluarsa(D.PER_ID.get(id)));
-        cekAn();
-        return toast('galat', 'Rejected', `${rows.length.toLocaleString('en-US')} expired series (over 2 years since document date).`);
-      }
-      const sudah = bisa.filter(r => B.ditetapkan(r) && !B.status(r));
-      if (!sudah.length) return turunkan(rows, false);
-      const per = {};
-      for (const r of sudah) for (const j of new Set(r.penetapan.map(p => p.jenis))) per[j] = (per[j] || 0) + 1;
-      const rinci = Object.entries(per).map(([j, n]) => `<span><b>${n.toLocaleString('en-US')}</b> ${esc(j)}</span>`).join('');
-      const contoh = sudah.slice(0, 5).map(r => `<tr><td>${esc(r.noPib)}</td><td class="kanan">${esc(r.seri)}</td><td>${esc(D.fmtHs(r.hs) || '-')}</td><td>${esc(r.penetapanTeks || '-')}</td></tr>`).join('');
-      modal('Already Assessed', `
-        <div class="pt">
-          <p class="pt-judul"><span class="ik">${IKON.segitiga}</span><span><b>${sudah.length.toLocaleString('en-US')}</b> of ${bisa.length.toLocaleString('en-US')} selected series already assessed. Continue?</span></p>
-          ${bisa.length < rows.length ? `<p class="pt-exp">${(rows.length - bisa.length).toLocaleString('en-US')} expired series rejected.</p>` : ''}
-          ${rinci ? `<div class="pt-rinci">${rinci}</div>` : ''}
-          <table class="pt-tabel"><thead><tr><th>Nomor Dokumen</th><th class="kanan">Seri</th><th>HS Code</th><th>Penetapan</th></tr></thead><tbody>${contoh}</tbody></table>
-          ${sudah.length > 5 ? `<p class="pt-sisa">+${(sudah.length - 5).toLocaleString('en-US')} more</p>` : ''}
-        </div>`, [
-        { teks: 'Cancel', kelas: 'btn-garis' },
-        ...(sudah.length < bisa.length ? [{ teks: 'Skip assessed', kelas: 'btn-garis biru', aksi: () => turunkan(rows, true) }] : []),
-        { teks: 'Continue', kelas: 'btn-biru', aksi: () => turunkan(rows, false) }
-      ]);
-    };
-    // Enter di kotak isian (bukan textarea) = Save bila aktif
-    const kunci = e => {
-      if (e.key === 'Escape') tutup();
-      else if (e.key === 'Enter' && e.target.matches('#laciTema input') && !$('#anSimpan').disabled) { e.preventDefault(); simpan(); }
-    };
-    $('#lapisan').appendChild(el);
-    $('#btnTema').classList.add('aktif');
-    document.addEventListener('keydown', kunci);
-    window.addEventListener('hashchange', tutup);
-    el.querySelector('.tutup').onclick = tutup;
-    $('#anSimpan').onclick = simpan;
-    $('#anTeks').oninput = cekAn;
-    // nama / jenis tema: dropdown dengan cari; teks yang belum ada jadi tema baru. Tema milik sendiri bisa dihapus
-    const jenis = pasangPilih($('#anJenis'), { label: v => esc(v || 'Theme Type'), baru: true, lebar: 240,
-      daftar: () => B.daftarJenis().map(v => ({ v })), pilih: cekAn });
-    pasangPilih($('#anTema'), { label: v => esc(v || 'Theme Name'), baru: true, lebar: 240,
-      daftar: () => { const bisa = B.temaBisaHapus(); return B.daftarTema().map(v => ({ v, hapus: bisa.has(v) })); },
-      // memilih nama tema yang sudah ada mengisi jenisnya bila Theme Type masih kosong
-      pilih: v => {
-        const ada = B.baris().map(r => B.status(r)).find(s => s.tema === v && s.jenis);
-        if (ada && !$('#anJenis').value) jenis.atur(ada.jenis);
-        cekAn();
-      },
-      hapus: (v, segarkanDaftar) => hapusTema(v, () => { tabel.render(); segarkanDaftar(); }) });
-    cekAn();
-    $('#anTema').focus();
   }
 
   function modalPerusahaan(r) {
@@ -1402,7 +1321,7 @@
     // HS terisi otomatis bila seri yang dipilih punya satu HS saran / penetapan yang sama, selama belum diketik sendiri
     const saranHs = () => {
       if (hsDiketik) return;
-      const saran = Array.from(new Set(o.rows().map(r => isian(r).hs || r.hsSaran).filter(Boolean)));
+      const saran = Array.from(new Set(o.rows().map(r => an(r).hs || r.hsSaran).filter(Boolean)));
       q('#hpHs').value = saran.length === 1 ? saran[0] : '';
     };
     const gambarTarif = () => {
@@ -1476,10 +1395,183 @@
   const unggahKeSeri = (rows, file) => Promise.all(rows.map(r => L.tambah(r.kunci, file, { nama: file.name.replace(/\.[^.]+$/, ''), oleh: B.peranKini() })))
     .catch(() => toast('galat', 'Gagal Mengunggah', file.name));
 
+  // Penetapan HS + Save to theme dalam satu popup di Browse (5 Nov 2026; dulu analisa di Basket lalu dua langkah terpisah di Browse).
+  // Kiri: seri tercentang (centang per seri / semua) dengan Kode Fasilitas (nama di tooltip), pratinjau tarif BM / PPN / PPh dan
+  // Potensi per seri, total potensi di bawah; seri yang sudah ditetapkan (SPTNP / SPKTNP / LHA) diberi label dan disebut di bawah tabel
+  // (boleh tetap disimpan = penetapan ulang, atau dilepas centangnya). Kanan: Nama Tema, Jenis Tema, lalu form Penetapan HS bersama
+  // (htmlFormHs / pasangFormHs, sama dengan halaman detail) plus satu dokumen kecil. Simpan = analisa tersimpan dan seri masuk basket
+  // dengan tema itu; seri yang sudah di basket sendiri (mis. Returned) hanya diperbarui analisanya. Seri yang sedang diajukan,
+  // milik unit lain, atau expired tidak ikut. Simpan tidak menutup popup: seri tersimpan hilang dari tabel, sisanya tetap.
+  // Teks popup berbahasa Indonesia (permintaan pengguna).
+  function bukaPenetapanHs(pilihan, selesai) {
+    let rows = pilihan.filter(B.bisaAnalisa);
+    const exp = pilihan.filter(B.kadaluarsa).length, kunci = pilihan.length - rows.length - exp;
+    const lewat = [exp && `${exp} expired`, kunci && `${kunci} sudah diajukan / milik unit lain`].filter(Boolean).join(', ');
+    if (!rows.length) return toast('galat', 'Tidak Bisa Menetapkan HS', `Seri terpilih tidak bisa dianalisa: ${lewat}.`);
+    let pakai = rows.map(() => true);
+    const dipakai = () => rows.filter((r, i) => pakai[i]);
+    const diBasket = r => { const s = B.status(r); return !!(s && s.milikSaya); };
+    const jenisTetap = r => Array.from(new Set((r.penetapan || []).map(p => p.jenis))).join(', ') || (B.ditetapkan(r) ? 'Ditetapkan' : '');
+    const htmlSeri = (r, i) => {
+      const tetap = an(r).hs;
+      const f = B.normFas(r.kodeFas);
+      const jt = jenisTetap(r), s = B.status(r);
+      return `<tr data-s="${i}"${pakai[i] ? '' : ' class="lepas"'}><td><input type="checkbox" data-s="${i}"${pakai[i] ? ' checked' : ''} aria-label="Nomor Dokumen ${esc(r.noPib)} Seri Barang ${esc(r.seri)}"></td>
+        <td>${esc(r.noPib)}</td><td class="kanan">${esc(r.seri)}</td>
+        <td${tetap ? ` title="${esc('HS Penetapan ' + D.fmtHs(tetap))}"` : ''}>${esc(D.fmtHs(r.hs) || '-')}${tetap ? '<i class="hp-titik"></i>' : ''}</td>
+        <td title="${esc(f ? (r.kodeFasNama || '').split('; ').join('\n') : 'Tanpa fasilitas')}">${esc(f || '-')}</td>
+        <td class="hp-ur" title="${esc(r.uraian || '')}">${s ? `<span class="hp-label kuning" title="${esc('Di basket, tema ' + s.tema)}">Basket</span>` : ''}${jt ? `<span class="hp-label" title="${esc(r.penetapanTeks || 'Sudah ditetapkan')}">${esc(jt)}</span>` : ''}${esc(r.uraian || '-')}</td>
+        ${TARIF_HS.map(([k]) => `<td class="kanan hp-trf" data-trf="${k}"></td>`).join('')}<td class="kanan hp-pot" data-pot></td></tr>`;
+    };
+    // tema bawaan: tema basket sendiri bila semua seri terpilih sudah di satu tema yang sama
+    const temaAda = Array.from(new Set(rows.map(r => (diBasket(r) ? B.status(r).tema : null))));
+    const sAwal = temaAda.length === 1 && temaAda[0] ? B.status(rows.find(diBasket)) : null;
+    modal('Penetapan HS', `
+      <div class="hp-wadah">
+        <div class="hp-daftar">
+          <div class="hp-gulir">
+            <table class="hp-tabel">
+              <thead><tr><th><input type="checkbox" id="hpSemua" checked aria-label="Pilih semua"></th><th>Nomor Dokumen</th><th class="kanan">Seri Barang</th><th>HS Code</th><th>Kode Fasilitas</th><th>Uraian Barang</th>
+                ${TARIF_HS.map(([, l, nama]) => `<th class="kanan" title="${nama} (%)">${l}</th>`).join('')}<th class="kanan" title="Potensi (penetapan - pemberitahuan)">Potensi</th></tr></thead>
+              <tbody id="hpList">${rows.map(htmlSeri).join('')}</tbody>
+            </table>
+          </div>
+          <div class="hp-n" aria-live="polite"><span id="hpN"></span><b id="hpTotal"></b></div>
+          <p class="hp-catat" id="hpCatat"${lewat ? '' : ' hidden'}>${lewat ? `Tidak ikut: ${esc(lewat)}.` : ''}</p>
+        </div>
+        <div class="isian">
+          <span>Nama Tema</span><button type="button" class="sel pilih" id="hpTema" aria-label="Nama Tema"></button>
+          <span>Jenis Tema</span><button type="button" class="sel pilih" id="hpJenis" aria-label="Jenis Tema"></button>
+          <span class="hp-sela"></span><span class="hp-sela"></span>
+          ${htmlFormHs(false, true)}
+        </div>
+      </div>`, [
+      { teks: 'Batal', kelas: 'btn-garis' },
+      { teks: 'Simpan', kelas: 'btn-biru', aksi: () => {
+        const pilih = dipakai();
+        const isi = form.isi();
+        const tema = rapi($('#hpTema').value), jenis = rapi($('#hpJenis').value);
+        B.isiAnalisa(pilih, isi);
+        const baru = pilih.filter(r => !diBasket(r));
+        const h = baru.length ? B.tambah(baru, tema, jenis, isi.alasan) : { masuk: 0 };
+        const ubah = pilih.length - baru.length;
+        const file = form.file();
+        if (file) { unggahKeSeri(pilih, file); form.lepasFile(); }
+        const total = pilih.reduce((n, r) => n + ((B.potensi(r) || {}).selisih || { total: 0 }).total, 0);
+        selesai(pilih);
+        toast('ok', 'Tersimpan', [h.masuk && `${h.masuk} seri masuk tema ${tema}`, ubah && `${ubah} seri di basket diperbarui`].filter(Boolean).join(', ') +
+          `. HS ${D.fmtHs(isi.hs)}, total potensi ${rupiah(total)}.` + (file ? ` Dokumen: ${file.name}.` : ''));
+        // buang seri yang tersimpan; sisa seri tetap dengan centangnya masing-masing
+        const sisa = rows.map((r, i) => [r, pakai[i]]).filter(([r]) => !pilih.includes(r));
+        if (!sisa.length) return;
+        rows = sisa.map(([r]) => r);
+        pakai = sisa.map(([, p]) => p);
+        $('#hpList').innerHTML = rows.map(htmlSeri).join('');
+        form.segar();
+        return false;
+      } }
+    ]);
+    const md = $('#lapisan .modal');
+    md.classList.add('modal-lebar');
+    const simpan = $('.modal-kaki [data-i="1"]', md);
+    const rapi = v => String(v || '').trim().replace(/\s+/g, ' ');
+    let formSah = false;
+    // Nama / Jenis Tema wajib untuk seri yang belum di basket; seri yang sudah di basket sendiri tetap di temanya
+    const cekSimpan = () => {
+      const n = dipakai().length;
+      const perluTema = dipakai().some(r => !diBasket(r));
+      simpan.disabled = !(formSah && n && (!perluTema || (rapi($('#hpTema').value) && rapi($('#hpJenis').value))));
+      simpan.textContent = `Simpan ${n} seri`;
+    };
+    const jenis = pasangPilih($('#hpJenis'), { nilai: sAwal ? sAwal.jenis : '', label: v => esc(v || 'Jenis Tema'), baru: true, lebar: 260,
+      daftar: () => B.daftarJenis().map(v => ({ v })), pilih: cekSimpan });
+    pasangPilih($('#hpTema'), { nilai: sAwal ? sAwal.tema : '', label: v => esc(v || 'Nama Tema'), baru: true, lebar: 260,
+      daftar: () => { const bisa = B.temaBisaHapus(); return B.daftarTema().map(v => ({ v, hapus: bisa.has(v) })); },
+      // memilih tema yang sudah ada mengisi jenisnya bila Jenis Tema masih kosong
+      pilih: v => {
+        const ada = B.baris().map(r => B.status(r)).find(s => s.tema === v && s.jenis);
+        if (ada && !$('#hpJenis').value) jenis.atur(ada.jenis);
+        cekSimpan();
+      },
+      hapus: (v, segarkanDaftar) => hapusTema(v, () => { selesai([]); segarkanDaftar(); }) });
+
+    // pratinjau potensi per seri dan total, dari isian form saat ini (tarif kosong = otomatis per seri)
+    const segarPotensi = () => {
+      const isi = form ? form.isi() : null;
+      const sah = isi && /^\d{8}$/.test(isi.hs);
+      const lain = sah ? isi.lain.filter(x => x.tarif != null && !Number.isNaN(x.tarif)) : [];
+      let total = 0;
+      $('#hpList').querySelectorAll('[data-pot]').forEach((td, i) => {
+        const r = rows[i];
+        const a = sah ? B.tarifOtomatis(r, isi.hs) : null;
+        const p = a ? B.potensi(r, { hs: isi.hs, bm: isi.bm ?? a.bm, ppn: isi.ppn ?? a.ppn, pph: isi.pph ?? a.pph, lain }) : null;
+        const v = p && Number.isFinite(p.selisih.total) ? p.selisih.total : null;
+        td.textContent = v == null ? '-' : rupiah(v);
+        td.classList.toggle('nol', v != null && v <= 0);
+        if (v != null && pakai[i]) total += v;
+      });
+      $('#hpTotal').textContent = sah ? rupiah(total) : '';
+    };
+    // seri terpilih yang sudah ditetapkan: disebut di bawah tabel (penetapan ulang tetap boleh)
+    const segarCatatan = () => {
+      const tetap = dipakai().filter(r => B.ditetapkan(r)).length;
+      const teks = [lewat && `Tidak ikut: ${lewat}.`, tetap && `${tetap} seri terpilih sudah ditetapkan (penetapan ulang).`].filter(Boolean).join(' ');
+      $('#hpCatat').textContent = teks;
+      $('#hpCatat').hidden = !teks;
+    };
+    // satu seri yang sudah dianalisa (mis. dikembalikan Analis 2): form terisi analisa lamanya
+    const form = pasangFormHs(md, {
+      rows: dipakai,
+      awal: rows.length === 1 && an(rows[0]).hs ? an(rows[0]) : null,
+      // pratinjau per seri di tabel kiri: nilai ketikan (berlaku untuk semua) atau otomatis seri itu
+      saatTarif: (k, ketik, hs) => {
+        $('#hpList').querySelectorAll(`[data-trf="${k}"]`).forEach((td, i) => {
+          const a = ketik == null ? B.tarifOtomatis(rows[i], hs) : null;
+          const v = ketik ?? (a ? a[k] : null);
+          td.textContent = v == null || Number.isNaN(v) ? '-' : v;
+          td.classList.toggle('otomatis', ketik == null);
+        });
+      },
+      saatCek: sah => {
+        const n = dipakai().length;
+        const semua = $('#hpSemua');
+        semua.checked = n === rows.length;
+        semua.indeterminate = n > 0 && n < rows.length;
+        $('#hpN').textContent = `${n} dari ${rows.length} seri`;
+        formSah = sah;
+        cekSimpan();
+        segarPotensi();
+        segarCatatan();
+      }
+    });
+
+    $('#hpList').addEventListener('change', e => {
+      const i = e.target.dataset.s;
+      if (i == null) return;
+      pakai[i] = e.target.checked;
+      e.target.closest('tr').classList.toggle('lepas', !e.target.checked);
+      form.segar();
+    });
+    // klik di mana saja pada baris = centang / lepas seri itu
+    $('#hpList').addEventListener('click', e => {
+      if (e.target.matches('input')) return;
+      const tr = e.target.closest('tr[data-s]');
+      if (tr) $('input', tr).click();
+    });
+    $('#hpSemua').onchange = e => {
+      pakai.fill(e.target.checked);
+      $('#hpList').querySelectorAll('tr[data-s]').forEach(tr => { $('input', tr).checked = e.target.checked; tr.classList.toggle('lepas', !e.target.checked); });
+      form.segar();
+    };
+    form.segar();
+    (sAwal ? $('#hpHs') : $('#hpTema')).focus();
+  }
+
   // ================= Basket =================
   function halProfil() {
     // kerangka sama dengan Browse: kartu atas (filter tema, Data History, mini dashboard yang bisa dilipat),
-    // kartu tabel, dan aksi seri tercentang (Penetapan HS, Process) di bar melayang.
+    // kartu tabel, dan aksi seri tercentang (Submit, keluarkan) di bar melayang. Tanpa analisa: HS penetapan dan tarif sudah diisi
+    // di Browse sebelum seri masuk basket, jadi di sini tinggal dikirim (5 Nov 2026).
     // Baris diwarnai per status seri (STATUS_SERI); legenda di kepala tabel berisi jumlah per status dan sekaligus saringan
     view.innerHTML = `
       <div class="wadah">
@@ -1494,14 +1586,12 @@
         <section class="kartu kartu-tabel">
           <div class="kartu-kepala ringkas">
             <button class="btn btn-garis biru btn-ikon btn-bersih" id="pkStatus" aria-haspopup="dialog" aria-expanded="false"><span class="ik">${IKON.corong}</span></button>
-            <button class="btn btn-garis biru btn-ikon btn-kolom" id="pkKolom" aria-haspopup="dialog" aria-expanded="false" title="Columns"><span class="ik">${IKON.kolom}</span></button>
             <button class="btn btn-garis biru btn-ikon" id="pkReset" title="Reset"><span class="ik">${IKON.segar}</span></button>
             <button class="btn btn-garis biru btn-ikon" id="pkImport" title="Import"><span class="ik">${IKON.unggah}</span></button>
             <button class="btn btn-garis biru btn-ikon" id="pkExport" title="Export"><span class="ik">${IKON.unduh}</span></button></div>
           <div class="kartu-isi" id="tblProfil"></div>
         </section>
-        ${htmlBarPilih(`<button class="biru" id="pkHs" title="Penetapan HS"><span class="ik">${IKON.pena}</span></button>
-          ${B.boleh.ajukan() ? `<button class="biru" id="pkAjukan" title="Submit for approval"><span class="ik">${IKON.kirim}</span></button>` : ''}
+        ${htmlBarPilih(`${B.boleh.ajukan() ? `<button class="biru" id="pkAjukan" title="Submit for approval"><span class="ik">${IKON.kirim}</span></button>` : ''}
           <button id="pkKeluar" title="Remove from basket"><span class="ik">${IKON.sampah}</span></button>`)}
       </div>`;
     pasangLipat($('#kartuProfil'));
@@ -1528,18 +1618,13 @@
     const dataTema = () => B.baris().filter(r => !tema || isian(r).tema === tema);
     const dataProfil = () => dataTema().filter(r => saringSt[statusSeri(r)]);
     // saringan status = satu ikon corong + dropdown bercentang (seperti Browse): dicentang = tampil; ikon biru penuh bila ada yang
-    // dimatikan. Jumlah per status dihitung sebelum saringan status, supaya status yang dimatikan tetap terlihat jumlahnya
+    // dimatikan. Tanpa jumlah per status (sama dengan Flag RE / Cleansing di Browse)
     let popSt = null;
     function isiPopStatus(el) {
-      const n = Object.fromEntries(STATUS_SERI.map(([k]) => [k, 0]));
-      const semua = dataTema();
-      for (const r of semua) n[statusSeri(r)]++;
       const nyala = STATUS_SERI.filter(([k]) => saringSt[k]).length;
       el.innerHTML = `
-        <div class="pb-baris pb-kepala"><label><input type="checkbox" data-semua ${nyala === STATUS_SERI.length ? 'checked' : ''}><b>Status</b></label>
-          <b class="pb-n">${semua.length.toLocaleString('id-ID')}</b></div>
-        ${STATUS_SERI.map(([k, l]) => `<div class="pb-baris"><label><input type="checkbox" data-st="${k}" ${saringSt[k] ? 'checked' : ''}><i class="pb-titik ${k}"></i>${l}</label>
-          <span class="pb-n">${n[k].toLocaleString('id-ID')}</span></div>`).join('')}`;
+        <div class="pb-baris pb-kepala"><label><input type="checkbox" data-semua ${nyala === STATUS_SERI.length ? 'checked' : ''}><b>Status</b></label></div>
+        ${STATUS_SERI.map(([k, l]) => `<div class="pb-baris"><label><input type="checkbox" data-st="${k}" ${saringSt[k] ? 'checked' : ''}><i class="pb-titik ${k}"></i>${l}</label></div>`).join('')}`;
       el.querySelector('[data-semua]').indeterminate = nyala > 0 && nyala < STATUS_SERI.length;
     }
     const gambarStatus = () => {
@@ -1577,7 +1662,6 @@
     $('#btnBatalPilih').onclick = () => tabel.kosongkanPilihan();
 
     const segarkan = () => { tabel.render(); isiStat($('#statProfil'), dataProfil()); };
-    $('#pkKolom').onclick = e => tabel.bukaPilihKolom(e.currentTarget);
     const terpilih = () => tabel.terpilih().map(id => D.PER_ID.get(id));
 
     beritaPulih(!!tema || !semuaStatus() || tabel.adaKeadaan(), () => { aturTema(''); aturStatus(SEMUA_STATUS()); lupakanTabel('basket3'); if ($('#tblProfil')) halProfil(); });
@@ -1617,107 +1701,6 @@
       toast('ok', 'Export Complete', `${rows.length.toLocaleString('en-US')} rows exported to CSV.`);
     };
 
-    // HS penetapan + tarif akhir untuk banyak seri sekaligus (catatan rapat no. 5, 6). Teks popup berbahasa Indonesia (permintaan pengguna).
-    // kiri: tabel seri tercentang (centang per seri / semua) dengan Kode Fasilitas tiap seri (nama fasilitas di tooltip) dan
-    // pratinjau tarif penetapan per seri. Kanan: form bersama (htmlFormHs / pasangFormHs, sama dengan halaman detail) plus satu
-    // dokumen kecil yang diunggah ke tiap seri yang disimpan. Simpan tidak menutup popup: seri yang tersimpan hilang dari tabel,
-    // sisanya tetap bisa ditetapkan; popup tertutup sendiri bila semua seri sudah tersimpan
-    $('#pkHs').onclick = () => {
-      let rows = terpilih().filter(r => isian(r).status === 'basket');
-      if (!rows.length) return toast('galat', 'Tidak Bisa Menetapkan HS', 'Pilih minimal satu seri yang belum diajukan.');
-      let pakai = rows.map(() => true);
-      const dipakai = () => rows.filter((r, i) => pakai[i]);
-      const htmlSeri = (r, i) => {
-        const tetap = isian(r).hs;
-        const f = B.normFas(r.kodeFas);
-        return `<tr data-s="${i}"${pakai[i] ? '' : ' class="lepas"'}><td><input type="checkbox" data-s="${i}"${pakai[i] ? ' checked' : ''} aria-label="Nomor Dokumen ${esc(r.noPib)} Seri Barang ${esc(r.seri)}"></td>
-          <td>${esc(r.noPib)}</td><td class="kanan">${esc(r.seri)}</td>
-          <td${tetap ? ` title="${esc('HS Penetapan ' + D.fmtHs(tetap))}"` : ''}>${esc(D.fmtHs(r.hs) || '-')}${tetap ? '<i class="hp-titik"></i>' : ''}</td>
-          <td title="${esc(f ? (r.kodeFasNama || '').split('; ').join('\n') : 'Tanpa fasilitas')}">${esc(f || '-')}</td>
-          <td class="hp-ur" title="${esc(r.uraian || '')}">${esc(r.uraian || '-')}</td>
-          ${TARIF_HS.map(([k]) => `<td class="kanan hp-trf" data-trf="${k}"></td>`).join('')}</tr>`;
-      };
-      modal('Penetapan HS', `
-        <div class="hp-wadah">
-          <div class="hp-daftar">
-            <div class="hp-gulir">
-              <table class="hp-tabel">
-                <thead><tr><th><input type="checkbox" id="hpSemua" checked aria-label="Pilih semua"></th><th>Nomor Dokumen</th><th class="kanan">Seri Barang</th><th>HS Code</th><th>Kode Fasilitas</th><th>Uraian Barang</th>
-                  ${TARIF_HS.map(([, l, nama]) => `<th class="kanan" title="${nama} (%)">${l}</th>`).join('')}</tr></thead>
-                <tbody id="hpList">${rows.map(htmlSeri).join('')}</tbody>
-              </table>
-            </div>
-            <div class="hp-n" id="hpN" aria-live="polite"></div>
-          </div>
-          <div class="isian">${htmlFormHs(false, true)}</div>
-        </div>`, [
-        { teks: 'Batal', kelas: 'btn-garis' },
-        { teks: 'Simpan', kelas: 'btn-biru', aksi: () => {
-          const pilih = dipakai();
-          const isi = form.isi();
-          const n = B.isiPenetapan(pilih, isi);
-          const file = form.file();
-          if (file) { unggahKeSeri(pilih, file); form.lepasFile(); }
-          const total = pilih.reduce((s, r) => s + ((B.potensi(r) || {}).selisih || { total: 0 }).total, 0);
-          segarkan();
-          toast('ok', 'Tersimpan', `${n} seri ditetapkan ke HS ${D.fmtHs(isi.hs)}. Total potensi ${rupiah(total)}.` + (file ? ` Dokumen: ${file.name}.` : ''));
-          // buang seri yang tersimpan; sisa seri tetap dengan centangnya masing-masing
-          const sisa = rows.map((r, i) => [r, pakai[i]]).filter(([r]) => !pilih.includes(r));
-          if (!sisa.length) return;
-          rows = sisa.map(([r]) => r);
-          pakai = sisa.map(([, p]) => p);
-          $('#hpList').innerHTML = rows.map(htmlSeri).join('');
-          form.segar();
-          return false;
-        } }
-      ]);
-      const md = $('#lapisan .modal');
-      md.classList.add('modal-lebar');
-      const simpan = $('.modal-kaki [data-i="1"]', md);
-      const form = pasangFormHs(md, {
-        rows: dipakai,
-        // pratinjau per seri di tabel kiri: nilai ketikan (berlaku untuk semua) atau otomatis seri itu
-        saatTarif: (k, ketik, hs) => {
-          $('#hpList').querySelectorAll(`[data-trf="${k}"]`).forEach((td, i) => {
-            const a = ketik == null ? B.tarifOtomatis(rows[i], hs) : null;
-            const v = ketik ?? (a ? a[k] : null);
-            td.textContent = v == null || Number.isNaN(v) ? '-' : v;
-            td.classList.toggle('otomatis', ketik == null);
-          });
-        },
-        saatCek: sah => {
-          const n = dipakai().length;
-          const semua = $('#hpSemua');
-          semua.checked = n === rows.length;
-          semua.indeterminate = n > 0 && n < rows.length;
-          $('#hpN').textContent = `${n} dari ${rows.length} seri`;
-          simpan.disabled = !sah;
-          simpan.textContent = `Simpan ${n} seri`;
-        }
-      });
-
-      $('#hpList').addEventListener('change', e => {
-        const i = e.target.dataset.s;
-        if (i == null) return;
-        pakai[i] = e.target.checked;
-        e.target.closest('tr').classList.toggle('lepas', !e.target.checked);
-        form.segar();
-      });
-      // klik di mana saja pada baris = centang / lepas seri itu
-      $('#hpList').addEventListener('click', e => {
-        if (e.target.matches('input')) return;
-        const tr = e.target.closest('tr[data-s]');
-        if (tr) $('input', tr).click();
-      });
-      $('#hpSemua').onchange = e => {
-        pakai.fill(e.target.checked);
-        $('#hpList').querySelectorAll('tr[data-s]').forEach(tr => { $('input', tr).checked = e.target.checked; tr.classList.toggle('lepas', !e.target.checked); });
-        form.segar();
-      };
-      form.segar();
-      $('#hpHs').focus();
-    };
-
     // keluarkan seri tercentang dari basket (bisa satu baris saja dari sebuah tema); yang sedang diajukan / di SIRENA tetap.
     // Tanpa popup konfirmasi: Undo di toast
     $('#pkKeluar').onclick = () => {
@@ -1744,7 +1727,7 @@
   // ================= Basket: Approval =================
   // halaman di dalam Basket (bukan menu sendiri): kiri daftar pengajuan, kanan bilah progres + keputusan senior + seri yang diajukan.
   // Saringan tahap = dropdown (titik warna + nama + jumlah)
-  const SARING_AP = [['review', 'Senior Review'], ['setuju', 'Approved'], ['sirena', 'SIRENA'], ['kembali', 'Returned'], ['tolak', 'Rejected']];
+  const SARING_AP = [['review', 'Analis 2 Review'], ['setuju', 'Approved'], ['sirena', 'SIRENA'], ['kembali', 'Returned'], ['tolak', 'Rejected']];
   const NAMA_AP = Object.fromEntries(SARING_AP);
   const cocokSaring = (a, f) => !f || a.status === f;
   const nadaAju = a => (a.status === 'tolak' ? 'gagal' : a.status === 'kembali' ? 'balik' : a.status === 'sirena' ? 'kirim' : '');
@@ -1876,9 +1859,7 @@
           ${milik ? htmlLangkah(B.langkahSeri(s)) : ''}
           ${htmlAlasan(a || (milik && s.kembali ? B.ambilAju(s.kembali.id) : null))}
           <div class="dt-isi">
-            ${milik ? `<div class="dt-form isian">${htmlFormHs(!ubah, false)}
-              ${ubah ? '<span></span><div><button class="btn btn-biru" id="dtSimpan" disabled>Simpan</button></div>' : ''}
-            </div>` : ''}
+            ${milik ? `<div class="dt-form isian">${htmlFormHs(true, false)}</div>` : ''}
             <dl class="dt-data">${DATA.map(([l, v]) => `<dt>${l}</dt><dd>${t(v)}</dd>`).join('')}</dl>
           </div>
           ${milik ? `<div class="dt-dok">
@@ -1890,16 +1871,8 @@
       </div>`;
     gambarAkun();
 
-    // form Penetapan HS sama dengan popup cepat (pasangFormHs); hanya baca bila seri sudah diajukan
-    if (milik) {
-      const form = pasangFormHs($('.dt-form'), { rows: () => [r], awal: s, kunci: !ubah, saatCek: sah => { $('#dtSimpan').disabled = !sah; } });
-      form.segar();
-      if (ubah) $('#dtSimpan').onclick = () => {
-        B.isiPenetapan([r], form.isi());
-        toast('ok', 'Tersimpan', `${r.noPib} · ${r.seri}`);
-        halDetail(id);
-      };
-    }
+    // hasil analisa dari Browse, hanya baca (form sama dengan popup Penetapan HS); perbaikan lewat Penetapan HS di Browse
+    if (milik) pasangFormHs($('.dt-form'), { rows: () => [r], awal: s, kunci: true });
     if (milik) {
       gambarDokumen(r, ubah);
       if (ubah) $('#dtUnggah').onclick = () => modalUnggah(r, () => gambarDokumen(r, ubah));

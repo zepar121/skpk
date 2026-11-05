@@ -1,7 +1,8 @@
 /*
  * Tabel bersama SKPK v2, meniru tabel prototipe To-Be (..\website-skpk): judul ringkas dengan menu kolom, sel aktif dan
- * pilihan rentang ala Excel, salin (Ctrl+C), ringkasan Sum/Average di status bar (hanya baris di halaman yang tampil), pin kolom, ubah lebar, seret judul
- * untuk memindah kolom, pilih kolom tampil, paginasi dengan nomor halaman yang bisa diketik, dan virtual scrolling.
+ * pilihan rentang ala Excel, salin (Ctrl+C), ringkasan Sum/Average di status bar (hanya baris di halaman yang tampil), pin kolom, ubah lebar,
+ * paginasi dengan nomor halaman yang bisa diketik, dan virtual scrolling. Kolom yang tampil dan urutannya tetap (kolomBawaan):
+ * tanpa pemilih kolom dan tanpa seret judul untuk memindah kolom (permintaan 5 Nov 2026); pin tetap lewat menu kolom.
  * Sengaja TIDAK meniru: dropdown saringan khas Excel (daftar nilai dicentang) dan ikon "buka detail" di kiri baris.
  * Menu kolom hanya berisi Sort (label ikut tipe: A to Z / Smallest to Largest / Oldest to Newest), Custom Sort (urut berlapis seperti
  * dialog Sort di Excel), Pin, Autofit, dan kotak cari biasa (tanpa daftar nilai / saran).
@@ -9,9 +10,8 @@
  *
  * buatTabel(wadah, {
  *   kolom: [{ key, label, lebar, tipe?: 'teks'|'angka'|'tanggal', nilai?: r => nilai mentah, isi?: r => html,
- *             saring?: false (tanpa kotak cari), tambahan?: true (tanda di pemilih kolom),
- *             grup?: 'General' | 'BC 2.0' | 'SKPK' (kelompok di pemilih kolom), alias?: nama lain yang ikut dicari }],
- *   kolomBawaan: [key],          // kolom yang tampil bila pengguna belum memilih (bawaan: semua)
+ *             saring?: false (tanpa kotak cari) }],
+ *   kolomBawaan: [key],          // kolom yang tampil, urut (bawaan: semua); kolom lain tetap terbaca (mis. untuk Advance Filter)
  *   data: () => rows,            // dipanggil ulang tiap render
  *   aksi: r => html, klikAksi: (nama, r, el) => {},
  *   centang: true, nomor: true,  // kotak centang / nomor urut di kiri (selalu menempel)
@@ -23,7 +23,7 @@
  *   kelasBaris: r => 'kelas',     // kelas tambahan per baris (mis. warna status)
  *   dobelKlik: r => {}            // dobel-klik baris = buka detail
  * }) -> { render, reset, terpilih, terfilter, kosongkanPilihan, lepasPilihan, keadaan, pulihkan, adaKeadaan, kolomTampil,
- *         bukaPilihKolom(jangkar), kolomDiubah, terhubung }
+ *         terhubung }
  */
 (function (root) {
   'use strict';
@@ -178,13 +178,12 @@
     const bawaanKolom = () => (cfg.kolomBawaan || SEMUA.map(k => k.key)).filter(k => PER_KEY.has(k));
     const bawaanPin = () => bawaanKolom().slice(0, cfg.beku || 0);
 
-    const kolomTersimpan = baca('kolom3');
     // kunci tersimpan dinaikkan (kolom3, pin3, lebar3) saat nama kolom diseragamkan dengan Excel, supaya tata letak lama tidak terbaca
     const pinTersimpan = baca('pin3');
     const st = {
       saring: {}, hal: 1, ukuran: 50, pilih: new Set(), urut: [], // urut: [{ key, arah: 'naik'|'turun' }], level pertama dulu
       lebar: baca('lebar3') || {},
-      kolom: Array.isArray(kolomTersimpan) ? kolomTersimpan.filter(k => PER_KEY.has(k)) : bawaanKolom(),
+      kolom: bawaanKolom(), // kolom dan urutannya tetap (tanpa pemilih kolom / seret judul)
       pin: Array.isArray(pinTersimpan) ? pinTersimpan.filter(k => PER_KEY.has(k)) : bawaanPin(),
       aktif: null,      // { i (indeks di hasil saringan), key }
       jangkar: null,    // ujung lain rentang (Shift)
@@ -201,7 +200,7 @@
     rapikanPin();
     const tampil = () => st.kolom.map(k => PER_KEY.get(k));
     const lebar = k => st.lebar[k.key] || lebarAwal(k);
-    const simpanKolom = () => { tulis('kolom3', st.kolom); tulis('pin3', st.pin); };
+    const simpanKolom = () => tulis('pin3', st.pin);
 
     // posisi kiri kolom menempel (centang, nomor, kolom pin). Kolom pin paling banyak 60% lebar tabel supaya area geser
     // tetap lega; di layar sempit sisa pin ikut bergulir (pilihan pin tetap tersimpan).
@@ -384,10 +383,10 @@
     }
 
     // ---------- status bar dan paginasi ----------
+    // tanpa "dari M" (jumlah sebelum saringan kolom): menghitungnya memanggil ulang data() di tiap render (permintaan 5 Nov 2026)
     function gambarStatus(total, jmlHal) {
-      const asal = adaSaring() ? cfg.data().length : total;
       const kiri = ambil('.tg-status-kiri');
-      kiri.innerHTML = `<span class="tg-jumlah${asal !== total ? ' terfilter' : ''}"><b>${total.toLocaleString('en-US')}</b> rows${asal !== total ? ` <span class="tg-redup">of ${asal.toLocaleString('en-US')}</span>` : ''}</span>` +
+      kiri.innerHTML = `<span class="tg-jumlah${adaSaring() ? ' terfilter' : ''}"><b>${total.toLocaleString('en-US')}</b> rows</span>` +
         (cfg.ringkas && total ? `<span class="tg-ringkas">${cfg.ringkas(st.rows)}</span>` : '') +
         (adaSaring() ? `<button type="button" class="tautan" data-hapus-saring title="Clear all column filters">Clear column filters</button>` : '');
       const b = (hal, ik, label, mati) => `<button type="button" class="tg-btn-ikon" data-hal="${hal}" title="${label}" aria-label="${label}"${mati ? ' disabled' : ''}>${ik}</button>`;
@@ -658,31 +657,10 @@
       if (pertama) pertama.focus();
     }
 
-    // pindah ke posisi tujuan (indeks kolom yang didahului; jumlah kolom = paling belakang).
-    // Jatuh di dalam blok pin = ikut di-pin, di luar = lepas pin, tepat di batas = tetap.
-    function pindahKolom(key, tujuan) {
-      const dari = st.kolom.indexOf(key);
-      if (dari < 0) return false;
-      const ke = tujuan > dari ? tujuan - 1 : tujuan;
-      const tadinya = st.pin.includes(key);
-      const n0 = st.pin.length - (tadinya ? 1 : 0);
-      const pin = ke < n0 ? true : ke > n0 ? false : tadinya;
-      st.kolom.splice(dari, 1);
-      st.kolom.splice(ke, 0, key);
-      st.pin = st.kolom.slice(0, n0 + (pin ? 1 : 0));
-      return ke !== dari || pin !== tadinya;
-    }
-
     function aturPin(key, pin) {
-      if (pin) {
-        if (!st.pin.includes(key)) st.pin.push(key);
-        st.kolom = st.kolom.filter(k => k !== key);
-        st.kolom.splice(st.pin.length - 1, 0, key);
-      } else {
-        st.pin = st.pin.filter(k => k !== key);
-        st.kolom = st.kolom.filter(k => k !== key);
-        st.kolom.splice(st.pin.length, 0, key);
-      }
+      // urutan kolom tetap (tidak bisa digeser): pin = pindah ke blok kiri, lepas pin = kembali ke tempat asalnya
+      st.pin = pin ? st.pin.filter(k => k !== key).concat(key) : st.pin.filter(k => k !== key);
+      st.kolom = bawaanKolom();
       rapikanPin();
       simpanKolom();
       gambarUlang();
@@ -731,7 +709,7 @@
     let abaikanKlik = false;
     const tahanKlik = () => { abaikanKlik = true; setTimeout(() => { abaikanKlik = false; }, 0); };
 
-    // tarik tepi kanan judul = ubah lebar; seret judul = pindah kolom (ke area pin = pin, keluar = lepas pin)
+    // tarik tepi kanan judul = ubah lebar (judul kolom tidak bisa diseret untuk memindah kolom)
     wadah.addEventListener('pointerdown', e => {
       if (e.button !== 0 || document.body.classList.contains('kmt-mode')) return;
       const pegangan = e.target.closest('.tg-ubah');
@@ -766,60 +744,8 @@
         pegangan.addEventListener('pointermove', gerak);
         pegangan.addEventListener('pointerup', lepas);
         pegangan.addEventListener('pointercancel', lepas);
-        return;
       }
-      const label = e.target.closest('.tg-th-label');
-      if (label) seretJudul(e, label);
     });
-    function seretJudul(e, label) {
-      const key = label.dataset.label;
-      const th = label.closest('th');
-      const g = ambil('.tg-gulir');
-      const x0 = e.clientX;
-      let jalan = false, tujuan = -1, garis = null;
-      const ths = () => Array.from(wadah.querySelectorAll('thead th[data-kol]'));
-      const gerak = ev => {
-        if (!jalan) {
-          if (Math.abs(ev.clientX - x0) < 6) return;
-          jalan = true;
-          th.classList.add('tg-diseret');
-          garis = document.createElement('div');
-          garis.className = 'tg-jatuh';
-          g.appendChild(garis);
-          document.body.classList.add('tg-menyeret');
-        }
-        const daftar = ths();
-        let t = daftar.length;
-        for (let i = 0; i < daftar.length; i++) {
-          const r = daftar[i].getBoundingClientRect();
-          if (ev.clientX < r.left + r.width / 2) { t = i; break; }
-        }
-        tujuan = t;
-        const acuan = daftar[Math.min(t, daftar.length - 1)].getBoundingClientRect();
-        const dasar = g.getBoundingClientRect();
-        garis.style.left = (t < daftar.length ? acuan.left : acuan.right) - dasar.left + g.scrollLeft - 1 + 'px';
-        garis.style.top = g.scrollTop + 'px';
-        garis.style.height = g.clientHeight + 'px';
-        // dekat tepi: gulir ke samping
-        if (ev.clientX > dasar.right - 40) g.scrollLeft += 12;
-        else if (ev.clientX < dasar.left + posisiKiri().lebarTetap + 40 && g.scrollLeft > 0) g.scrollLeft -= 12;
-      };
-      const lepas = () => {
-        removeEventListener('pointermove', gerak);
-        removeEventListener('pointerup', lepas);
-        removeEventListener('pointercancel', lepas);
-        if (!jalan) return;
-        tahanKlik();
-        th.classList.remove('tg-diseret');
-        garis.remove();
-        document.body.classList.remove('tg-menyeret');
-        if (tujuan >= 0 && pindahKolom(key, tujuan)) { simpanKolom(); gambarUlang(); }
-      };
-      addEventListener('pointermove', gerak);
-      addEventListener('pointerup', lepas);
-      addEventListener('pointercancel', lepas);
-    }
-
     wadah.addEventListener('dblclick', e => {
       const pegangan = !document.body.classList.contains('kmt-mode') && e.target.closest('.tg-ubah');
       if (pegangan) { pasLebar(st.kolPilih.includes(pegangan.dataset.ubah) ? st.kolPilih : [pegangan.dataset.ubah]); return; }
@@ -969,131 +895,6 @@
       addEventListener('pointercancel', lepas);
     });
 
-    // ---------- pilih kolom tampil (seperti Choose columns di To-Be) ----------
-    function bukaPilihKolom(jangkar) {
-      if (menuAktif && menuAktif.jangkar === jangkar) { tutupMenu(); return; }
-      const el = document.createElement('div');
-      el.className = 'tg-menu tg-menu-pilih';
-      el.setAttribute('role', 'dialog');
-      el.setAttribute('aria-label', 'Choose columns');
-      el.innerHTML = `<div class="tg-menu-judul">Columns <span class="tg-redup" data-k="jumlah"></span></div>
-        <div class="tg-menu-cari">${IK.cari}<input type="search" data-k="cari" placeholder="Search columns" aria-label="Search columns" autocomplete="off"></div>
-        <div class="tg-pilih-daftar" data-k="daftar"></div>
-        <div class="tg-menu-kaki"><button type="button" class="tautan" data-kk="semua">All</button><button type="button" class="tautan" data-kk="bawaan">Default</button></div>`;
-      const daftar = el.querySelector('[data-k="daftar"]');
-      const cari = el.querySelector('[data-k="cari"]');
-      const tag = k => (k.tambahan ? '<span class="tg-tag" title="Added column">added</span>' : '') +
-        (st.pin.includes(k.key) ? '<span class="tg-tag" title="Pinned">pin</span>' : '') +
-        (st.saring[k.key] ? '<span class="tg-titik" title="Filtered"></span>' : '');
-      const bisaGeser = () => !cari.value.trim();
-      // kolom tersembunyi per kelompok (k.grup: General, jenis dokumen, SKPK); tanpa grup = satu kelompok Hidden
-      const kelompokTersembunyi = b => {
-        if (!b.length) return [];
-        if (!b.some(k => k.grup)) return [['Hidden', b]];
-        const g = new Map();
-        for (const k of b) { const n = k.grup || 'Other'; if (!g.has(n)) g.set(n, []); g.get(n).push(k); }
-        const urut = n => (n === 'General' ? 0 : n === 'SKPK' ? 2 : 1);
-        return Array.from(g).sort((x, y) => urut(x[0]) - urut(y[0]));
-      };
-      const isi = fokus => {
-        const q = cari.value.trim().toLowerCase();
-        // alias = nama kolom Excel di balik kolom inti (mis. Nm Imp untuk Nama Perusahaan): ikut dicari, tidak ditampilkan
-        const cocok = k => !q || k.label.toLowerCase().includes(q) || (!!k.alias && k.alias.toLowerCase().includes(q));
-        const a = tampil().filter(cocok);
-        const b = SEMUA.filter(k => !st.kolom.includes(k.key)).filter(cocok);
-        const geser = bisaGeser();
-        const judul = k => esc(k.label);
-        daftar.innerHTML = (a.length ? `<div class="tg-pilih-sub">Shown</div><div data-k="tampil">` +
-          a.map((k, i) => `<div class="tg-vi tg-vi-geser${geser && i === st.pin.length - 1 ? ' tg-vi-pin-akhir' : ''}" data-geser="${esc(k.key)}">` +
-            (geser ? `<button type="button" class="tg-vi-pegang" data-pegang="${esc(k.key)}" aria-label="Move ${esc(k.label)} (position ${i + 1} of ${a.length})">${IK.pegang}</button>` : '') +
-            `<label class="tg-vi-isi"><input type="checkbox" data-k="${esc(k.key)}" checked><span class="tg-vi-t">${judul(k)}</span>${tag(k)}</label></div>`).join('') + '</div>' : '') +
-          kelompokTersembunyi(b).map(([nama, ks]) => `<div class="tg-pilih-sub">${esc(nama)} <span class="tg-redup">${ks.length}</span></div>` +
-            ks.map(k => `<label class="tg-vi"><input type="checkbox" data-k="${esc(k.key)}"><span class="tg-vi-t">${judul(k)}</span>${tag(k)}</label>`).join('')).join('') ||
-          '<div class="tg-vi-catatan">No matching columns</div>';
-        el.querySelector('[data-k="jumlah"]').textContent = st.kolom.length + '/' + SEMUA.length;
-        if (fokus) { const f = daftar.querySelector(`[data-pegang="${CSS.escape(fokus)}"]`); if (f) f.focus({ preventScroll: true }); }
-      };
-      const terapkan = () => { rapikanPin(); simpanKolom(); gambarUlang(); };
-      const pindah = (key, ke) => {
-        if (pindahKolom(key, ke)) terapkan();
-        isi(key);
-      };
-      isi();
-      pasangMenu(el, jangkar, { kanan: true });
-      cari.addEventListener('input', () => isi());
-      cari.focus({ preventScroll: true });
-      el.addEventListener('change', e => {
-        const k = e.target.dataset.k;
-        if (!k || !PER_KEY.has(k)) return;
-        if (e.target.checked) st.kolom = st.kolom.filter(x => x !== k).concat(k);
-        else if (st.kolom.length === 1) { e.target.checked = true; pesan('Columns', 'At least one column must stay visible.'); return; }
-        else st.kolom = st.kolom.filter(x => x !== k);
-        terapkan();
-        isi();
-      });
-      el.addEventListener('click', e => {
-        const a = e.target.closest('[data-kk]');
-        if (!a) return;
-        if (a.dataset.kk === 'semua') st.kolom = st.kolom.concat(SEMUA.map(k => k.key).filter(k => !st.kolom.includes(k)));
-        else { st.kolom = bawaanKolom(); st.pin = bawaanPin(); st.lebar = {}; tulis('lebar3', st.lebar); }
-        terapkan();
-        isi();
-      });
-      el.addEventListener('keydown', e => {
-        const h = e.target.closest('[data-pegang]');
-        if (!h || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-        e.preventDefault();
-        const i = st.kolom.indexOf(h.dataset.pegang);
-        if (e.key === 'ArrowUp' && i > 0) pindah(h.dataset.pegang, i - 1);
-        else if (e.key === 'ArrowDown' && i < st.kolom.length - 1) pindah(h.dataset.pegang, i + 2);
-      });
-      // seret pegangan: garis biru menandai tempat jatuh, daftar ikut bergulir di dekat tepi
-      el.addEventListener('pointerdown', e => {
-        const h = e.button === 0 && e.target.closest('[data-pegang]');
-        if (!h || !bisaGeser()) return;
-        e.preventDefault();
-        const key = h.dataset.pegang;
-        const wadahTampil = daftar.querySelector('[data-k="tampil"]');
-        const item = h.closest('.tg-vi-geser');
-        const garis = document.createElement('div');
-        garis.className = 'tg-pilih-jatuh';
-        wadahTampil.appendChild(garis);
-        item.classList.add('tg-vi-tarik');
-        h.setPointerCapture(e.pointerId);
-        let y = e.clientY, tujuan = -1, aktif = true;
-        const posisi = () => {
-          const items = Array.from(wadahTampil.querySelectorAll('.tg-vi-geser'));
-          let t = items.length;
-          for (let i = 0; i < items.length; i++) { const r = items[i].getBoundingClientRect(); if (y < r.top + r.height / 2) { t = i; break; } }
-          tujuan = t;
-          const acuan = items[Math.min(t, items.length - 1)];
-          garis.style.top = (t < items.length ? acuan.offsetTop : acuan.offsetTop + acuan.offsetHeight) - 1 + 'px';
-        };
-        const gulir = () => {
-          if (!aktif) return;
-          const r = daftar.getBoundingClientRect();
-          const laju = y < r.top + 28 ? -8 : y > r.bottom - 28 ? 8 : 0;
-          if (laju) { daftar.scrollTop += laju; posisi(); }
-          requestAnimationFrame(gulir);
-        };
-        posisi();
-        requestAnimationFrame(gulir);
-        const gerak = ev => { y = ev.clientY; posisi(); };
-        const lepas = () => {
-          aktif = false;
-          h.removeEventListener('pointermove', gerak);
-          h.removeEventListener('pointerup', lepas);
-          h.removeEventListener('pointercancel', lepas);
-          garis.remove();
-          item.classList.remove('tg-vi-tarik');
-          if (tujuan >= 0) pindah(key, tujuan);
-        };
-        h.addEventListener('pointermove', gerak);
-        h.addEventListener('pointerup', lepas);
-        h.addEventListener('pointercancel', lepas);
-      });
-    }
-
     // ---------- keadaan (untuk diingat peramban dan tombol Urungkan) ----------
     function keadaan() {
       return { saring: { ...st.saring }, hal: st.hal, ukuran: st.ukuran, urut: st.urut.map(u => ({ ...u })), pilih: Array.from(st.pilih) };
@@ -1134,8 +935,6 @@
       terhubung: () => wadah.isConnected,
       terpilih: () => Array.from(st.pilih),
       kolomTampil: () => tampil(),
-      kolomDiubah: () => st.kolom.join() !== bawaanKolom().join(),
-      bukaPilihKolom,
       kosongkanPilihan() { st.pilih.clear(); render(); },
       // lepas centang baris yang memenuhi fn(id), mis. baris yang baru disembunyikan saringan luar
       lepasPilihan(fn) { let n = 0; for (const id of st.pilih) if (fn(id)) { st.pilih.delete(id); n++; } if (n) render(); return n; },
