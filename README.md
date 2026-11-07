@@ -44,8 +44,111 @@ API untuk dibaca program lain: `GET /api/komentar` (JSON).
 
 | Menu | Peran | Isi |
 |---|---|---|
-| **Browse** (Menu 1) | Cari, analisa, review draft, kirim | Seluruh populasi BC 2.0, flag RE, status seri; satu popup **Penetapan HS** untuk seri tercentang: tema + HS penetapan, tarif, pratinjau potensi, lalu simpan = masuk **draft** Analis 1 itu; **Daftar Analisa** (workspace) untuk review lalu **Send to Basket** |
-| **Basket** (Menu 2) | Keputusan (Analis 2 / Admin saja) | Seri kiriman semua Analis 1: Approve, Return, Reject, Send to SIRENA (tanpa analisa di sini). Analis 1 tidak bisa membuka menu ini |
+| **Browse** (Menu 1) | Cari, analisis, review draft, kirim, **Approval**, **Riwayat Penetapan**, **Import DNOA** | Seluruh populasi BC 2.0, flag RE, status seri; satu popup **Penetapan HS** untuk seri tercentang: tema + HS penetapan, tarif, pratinjau potensi, lalu **Simpan** = masuk **draft** Analis 1 itu; **Daftar Analisis** (workspace Analis 1) lalu **Kirim** ke Approval; workspace **Approval** (Analis 2 / Admin): Setujui / Kembalikan / Tolak; halaman **Riwayat Penetapan** dan **Import DNOA** dengan Import (Analis 1) dan Approval import (Analis 2) |
+| **Basket Nominasi** (Menu 2) | Final (Analis 2 / Admin saja) | Hanya seri yang sudah disetujui; tanpa fitur kembalikan; tinggal **Kirim** ke SIRENA. Analis 1 tidak bisa membuka menu ini |
+
+## Revisi 7 Nov 2026: Simpan / Kirim per centang, HS 8 digit, istilah baku
+
+- **Popup Penetapan HS**: tombol *Simpan N seri* / *Kirim N seri* menghitung seri yang **dicentang** (dulu semua seri lengkap, tercentang atau tidak).
+  - **Simpan** cukup **Tema + Jenis Tema**; HS Penetapan, tarif, Pungutan Lain, Alasan, dan dokumen boleh kosong (yang terisi harus sah).
+    Draft tanpa HS tampil di Daftar Analisis dan bisa dilengkapi lewat Penetapan HS.
+  - **Kirim** mewajibkan semua isian (Tema, Jenis Tema, HS Penetapan 8 digit, Alasan, tarif sah) kecuali dokumen. Syarat yang sama dipakai
+    tombol Kirim di Daftar Analisis dan halaman Detail (`B.analisaLengkap`).
+  - Tombol aktif hanya bila semua seri tercentang memenuhi syarat; seri tercentang yang belum memenuhi diberi titik merah, tooltip = isian yang kurang.
+- **HS Penetapan** hanya angka, mentok 8 digit (tempel `8471.30.10` terbaca `84713010`); kotak merah bila terisi kurang dari 8 digit.
+- **Istilah** mengikuti `Daftar Istilah SKPK v2 - Review.xlsx` (sheet Pedoman Bahasa): Basket Nominasi, Riwayat Penetapan (dulu Data History),
+  Import DNOA (dulu SIRENA Manual), Daftar Analisis, Kedaluwarsa, Status (posisi seri dan file import), Tema, Alasan, Tarif BM Penetapan,
+  Jenis Penetapan, HS / Tarif Rekomendasi, tombol satu kata kerja (Kirim, Simpan, Setujui, Kembalikan, Tolak, Hapus, Cari, Unggah, Batal),
+  toast dan notifikasi berbahasa Indonesia, operator Advanced Filter berbahasa Indonesia (operator angka tetap simbol), angka format Indonesia.
+  Alamat halaman (`#/.../data-history`, `#/.../sirena-manual`) dan kunci data tidak diubah supaya tautan dan data tersimpan tetap jalan.
+- Template import: *Tanggal Awal / Akhir Periode* (dulu "... Periode Audit") dan *Tema* (dulu "Nama Tema"); judul lama tetap dikenali.
+  Dummy di `..\Import SKPK v2\`: Audit (LHA), Penelitian Ulang (LHPU), DNOA.
+- Export Basket Nominasi kini Excel (dulu CSV).
+
+## Revisi 6 Nov 2026: Import Data History dan SIRENA Manual
+
+Dua tombol Import lama (Data History dan Basket) hanya memunculkan toast. Sekarang import punya template, validasi, dan Approval.
+Bagian README lain yang menyebut Data History di Basket atau tombol Import di Basket sudah digantikan oleh bagian ini.
+
+- **Sumber riwayat**: Notul (SPTNP) otomatis dari database, tidak diimport. Audit (LHA) dan Penul (LHPU) sementara diupload manual;
+  nanti terhubung otomatis dengan SIMAUDI dan SIRENA. **SIRENA Manual** = seri yang sudah jadi DNOA / dikirim ke SIRENA di luar SKPK
+  (masa transisi), statusnya paling tinggi (di atas Basket).
+- **Dua halaman transit di Browse** (ikon di kepala tabel Browse, sebelah Daftar Analisa / Approval; semua peran):
+  `#/smart-pcc/browse-pib/data-history` dan `#/smart-pcc/browse-pib/sirena-manual`. Alamat lama `/penelitian-skpk/data-history` dialihkan.
+  Tabel view + Reset, **Import** (Analis 1 / Admin), Export. Kolom **Status** (System / Approval / Approved / Rejected, detail di tooltip)
+  dan **Import** (nomor `IMP-...`, nama file di tooltip). Badge angka di ikon = file yang menunggu Approval (Analis 2 / Admin).
+  Basket tidak lagi punya Import maupun tautan Data History.
+- **Popup Import**: jenis (Audit · LHA / Penul · LHPU; SIRENA Manual tanpa pilihan), ikon unduh **template** .xlsx, dan zona file
+  (.xlsx / .csv, pilih atau seret). Revisi 6 Nov 2026: tabel kolom (Column · Type · Format · Required) dan sheet Columns dihapus;
+  template = satu sheet berisi judul kolom, data type tertanam di format kolom (kode = Text, tanggal = dd/mm/yyyy, angka = General).
+  File contoh berisi data dummy (seri asli populasi, lolos validasi): `..\Import SKPK v2\Dummy Import *.xlsx`. File langsung diperiksa:
+  1. judul kolom sesuai template (kolom asing / wajib hilang = ditolak);
+  2. data type (Kode Kantor 6 digit, Nomor Dokumen angka, tanggal, Seri bilangan bulat, HS 8 digit, tarif 0–100);
+  3. kolom wajib tidak kosong;
+  4. **kebenaran seri**: Kode Dokumen + Kode Kantor + Nomor + Tanggal + Seri harus ada di populasi (mencegah data karangan);
+  5. HS Code (opsional) sama dengan data; 6. duplikat dalam file; 7. duplikat di SKPK (temuan yang sama sudah ada / menunggu;
+     SIRENA Manual: seri sudah SIRENA atau sedang di upload lain).
+  **Satu baris error = file ditolak**: daftar "Row n · kolom · nilai · pesan" dan ikon unduh daftar error. File bersih: *n rows ready*,
+  lalu **Send to Approval** (satu file = satu pengajuan import).
+- **Approval import** (Analis 2 / Admin): centang baris lalu bar melayang **Approve / Reject**, berlaku untuk seluruh file dari baris
+  terpilih, lewat popup konfirmasi (Reject catatan wajib). Admin juga **Delete** (bypass, catatan wajib), termasuk file yang sudah
+  Approved. Approve / Delete Audit / Penul memuat ulang halaman karena flag mesin (Penetapan Seri, Cleansing, RE Perluasan) dihitung saat dimuat.
+- **SIRENA Manual menimpa** Draft, Approval, dan Basket: seri keluar dari pengajuannya (`ditimpa`, riwayat aksi `manual`), analisanya dibuang,
+  entri jadi `sirena` dengan `manual: { impor, dnoa, ... }`. Status Basket di Browse = `SIRENA <nomor SIRENA atau DNOA>` (hijau). Tidak tampil
+  di Basket maupun Daftar Analisa.
+- **Notifikasi**: *Import needs approval* (Analis 2 / Admin, per file), *Import rejected* (pengunggah, dengan catatan), *Overridden by SIRENA
+  Manual* (pemilik lama seri yang ditimpa). Dua yang terakhir hilang setelah dibuka.
+- Kode: `public/js/impor.js` (pembaca XLSX / CSV disalin dari To-Be, template, `periksa`, alur), `SkpkBasket.sirenaManual` / `hapusManual`
+  (`basket.js`), halaman `halTransit` (`app.js`). Penyimpanan: `skpk-v2:impor`, `skpk-v2:ditimpa`; temuan yang di-Approve masuk riwayat mesin
+  (`skpk-prototipe.riwayat.v1`, field `impor`).
+
+## Revisi 6 Nov 2026 (rapat): Approval sebelum Basket, Basket final, menu kolom ringkas
+
+Bagian README lain yang menyebut Approve / Return / Reject di Basket, "Send to Basket", atau tahap "Analis 2 Review / Approved" sudah digantikan oleh bagian ini.
+
+- **Alur**: Draft (Analis 1, Browse) → **Approval** (transit, Browse milik Analis 2) → **Basket** (sudah di-Approve, final) → SIRENA.
+  Bilah progres: Draft → Approval → Basket → SIRENA. Status entri seri: `draft` → `ajukan` → `setuju` (+ `setuju: { oleh, waktu }`) → `sirena`.
+  Alasannya: seri yang masuk basket mengunci seri itu dari unit lain dan kantor pusat, jadi basket hanya boleh berisi yang benar-benar layak kirim.
+- **Approval** (ikon alur di kepala tabel Browse, sebelah Daftar Analisa; hanya Analis 2 / Admin; angka = pengajuan yang menunggu):
+  tabel seri kiriman semua Analis 1 (Tema, Analis, Sisa Hari, lalu kolom Browse dan hasil analisa). Bar melayang **Approve / Return / Reject**
+  untuk seri terpilih (satu, beberapa, atau satu tema: saring kolom Tema lewat drop list lalu pilih semua). Semuanya lewat **popup konfirmasi**
+  (Approve: "cannot be returned"; Return / Reject: catatan wajib). Return per seri = seri kembali ke draft pengusul (Returned); Reject = seri bebas
+  lagi. Halaman pengajuan `#/.../approval/<SUB>` sekarang bagian Browse: tombol berlaku untuk semua seri yang masih menunggu, tabel seri menampilkan
+  status per seri (Approval / Basket / SIRENA / Returned / Rejected). Detail seri: tombol berlaku untuk seri itu saja.
+- **Basket final**: hanya seri `setuju` dan `sirena` unit sendiri. Tidak ada Reject, Return, ikon sampah tema, maupun Undo Approve. Bar melayang
+  hanya **Send to SIRENA** (konfirmasi; satu tema = satu nomor `SRN-...`). Kolom baru **Sisa Hari** (sampai batas 2 tahun sejak tanggal dokumen,
+  merah ≤ 30 hari) dan **Umur Basket** (hari sejak Approve, merah ≥ 30 hari) sebelum Status. Saringan status: Basket / SIRENA / Expired.
+  Tombol Approval di kepala Basket dihapus. Sisa Hari juga ada di Daftar Analisa.
+- **Status Basket di Browse** = pemegang seri: `Draft - <analis>`, `Approval - <analis>`, `Basket` / `Basket - <unit lain>`, `SIRENA <nomor>`.
+  Warna baris: kuning = Draft / Approval, hijau = Basket / SIRENA.
+- **Notifikasi**: *Ready for SIRENA* diganti **30+ days in Basket** (n seri per tema, Analis 2 / Admin; muncul lagi tiap kelipatan 30 hari).
+  Tanpa eskalasi. *Needs approval* dan *Expiring* yang masih di Approval membuka Browse mode Approval dengan saringan tema itu.
+- **Menu kolom ringkas** (semua tabel): kotak **Search paling atas**, lalu satu baris ikon (Sort naik / turun, Custom Sort, Pin, Autofit; nama di tooltip).
+  Tinggi menu sekitar sepertiga dari sebelumnya.
+- **Drop list nilai** untuk kolom yang variasinya sedikit: `daftar: true` (Tema, Analis, Status, Status Basket, Jenis Tema) atau kolom teks dengan
+  ≤ 30 nilai unik (mis. Jalur, Kode Kantor, flag Y/N). Baru muncul saat kotak Search **diklik atau diketik**, menyempit sesuai ketikan, tanpa jumlah baris.
+  Pilih = `=nilai` (sama persis; aturan baru di kotak cari kolom). Angka, tanggal, nomor, dan uraian tidak punya drop list.
+  Advance Filter memakai aturan yang sama: pilih nilai = operator *equals* + nilai itu.
+- **Revisi lanjutan 6 Nov 2026**:
+  - Drop list nilai kini **pilih banyak** (bercentang, daftar tetap terbuka); nilai terpilih tampil sebagai chip, saringan = salah satu cocok.
+  - **Tempel daftar** (menu kolom dan Advance Filter): menempel kolom dari Excel / Notepad (NPWP, uraian, nama perusahaan; satu per baris)
+    menjadi chip per baris, bukan satu teks panjang. Angka berpemisah (NPWP `01.234.567.8-901.000`) cocok juga dengan digitnya saja.
+    Selama ada chip, ketikan hanya mempersempit drop list; Enter menambah chip, Backspace di kotak kosong menghapus chip terakhir.
+    Disimpan sebagai teks berpemisah baris baru (`tabel.js`: `pasangKotakDaftar`, `pisahDaftar`, `digitSaja`).
+  - **Penetapan HS, edit per seri** (revisi keempat, 6 Nov 2026): satu konsep pilihan, **centang = seri yang sedang diedit**. Popup dibuka
+    dengan semua seri tercentang. Klik bagian baris = fokus ke seri itu saja (seri lain dilepas; Shift = rentang, Ctrl = tambah / kurangi);
+    klik area centang (kotak + selnya) = tambah / kurangi untuk memilih beberapa, Shift = rentang. Sakelar Semua / Satu / Beberapa dan
+    sorotan dihapus. Isian (HS, tarif, pungutan, alasan, Nama / Jenis Tema) tersimpan per seri; bila seri tercentang isiannya berbeda,
+    kolom itu kosong (tanpa keterangan "Per seri") dan hanya kolom yang diubah yang ditimpa. Potensi per seri dan totalnya langsung
+    terhitung begitu HS Penetapan dan tarif ada (tidak menunggu Alasan / Tema). **Simpan** menyimpan semua seri yang **lengkap** (tercentang
+    atau tidak), dikelompokkan per tema + analisa; seri yang belum lengkap tetap di popup (titik merah bila sebagian sudah lengkap).
+    **Kirim** = Simpan lalu langsung Send to Approval (satu tema = satu pengajuan); Undo di toast hanya membatalkan kirim, seri tetap di
+    draft. Kirim hanya untuk peran yang boleh mengirim; Enter di isian = Simpan.
+  - **Dropdown pencarian** (`pasangPilih`: Nama / Jenis Tema dan sejenisnya): saat dibuka, kotak cari menimpa tombolnya sendiri di baris
+    yang sama dan daftar menyambung langsung di bawahnya (tidak menambah baris); bila ruang bawah sempit, daftar terbuka ke atas.
+  - **Reset Advance Filter = murni ke awal**: Advance Filter, Flag RE, Cleansing (termasuk tampilan baris yang dibuang), saringan kolom,
+    urutan, halaman, dan centang. Susunan kolom serta mode Daftar Analisa / Approval tetap. Undo mengembalikan semuanya.
+- **Data lama** dimigrasi: entri yang pengajuannya sudah Approved menjadi `setuju`; pengajuan Returned memindahkan serinya ke `dikembalikan`.
 
 ## Pemisahan Analis 1 dari Basket (5 Nov 2026, arahan atasan)
 
@@ -66,7 +169,7 @@ Bagian lain README yang masih menyebut Submit di Basket, Basket milik Analis 1, 
   disembunyikan, Advance Filter tetap. Bar melayang: Penetapan HS (perbaiki), **Send to Basket**, dan lepas dari draft (analisa dibuang, Undo);
   aksi hanya berlaku untuk Draft / Returned, seri lain dilewati dan disebut jumlahnya di toast. Dobel-klik = detail seri (dokumen pendukung,
   tombol Send to Basket).
-- **Basket, Approval, Data History hanya Analis 2 / Admin**: menu Basket disembunyikan untuk Analis 1 dan alamatnya dialihkan ke Browse.
+- **Basket dan Approval hanya Analis 2 / Admin** (Data History pindah ke Browse untuk semua peran, 6 Nov 2026): menu Basket disembunyikan untuk Analis 1 dan alamatnya dialihkan ke Browse.
   Analis 1 hanya bisa membuka detail seri miliknya sendiri (menu aktif Browse). Basket berisi kiriman semua Analis 1 dengan kolom **Analis**
   (pengusul); saringan status In review / Processed / Expired.
 - **Keputusan Analis 2**: Approve, Return (pengajuan kembali ke draft pengusulnya berlabel Returned), **Reject**, Send to SIRENA. Analis 2 tidak

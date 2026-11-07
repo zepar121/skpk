@@ -43,6 +43,7 @@
   const S_HEADER = 1;
   const S_TANGGAL = 2;
   const S_TEBAL = 3;
+  const S_TEKS = 4;
   function selTeks(ref, v, gaya) {
     return '<c r="' + ref + '" t="inlineStr"' + (gaya ? ' s="' + gaya + '"' : '') + '><is><t xml:space="preserve">' + xml(v) + '</t></is></c>';
   }
@@ -55,21 +56,27 @@
     }
     return selTeks(ref, v);
   }
-  function sheetData(kols, rows) {
+  // formatKolom: kolom teks / kode diberi format Text (@) dan kolom tanggal dd/mm/yyyy, termasuk sel kosong (template import)
+  const gayaKolom = k => (k.tipe === 'tanggal' ? S_TANGGAL : k.tipe === 'angka' ? 0 : S_TEKS);
+  function sheetData(kols, rows, formatKolom) {
     const akhir = hurufKolom(kols.length - 1) + (rows.length + 1);
     const huruf = kols.map((k, i) => hurufKolom(i));
     const isi = [];
     isi.push('<row r="1">' + kols.map((k, i) => selTeks(huruf[i] + '1', k.label, S_HEADER)).join('') + '</row>');
     rows.forEach((r, j) => {
       const n = j + 2;
-      isi.push('<row r="' + n + '">' + kols.map((k, i) => selXlsx(huruf[i] + n, r[k.key], k.tipe)).join('') + '</row>');
+      isi.push('<row r="' + n + '">' + kols.map((k, i) => {
+        if (formatKolom && gayaKolom(k) === S_TEKS && !kosong(r[k.key])) return selTeks(huruf[i] + n, r[k.key], S_TEKS);
+        return selXlsx(huruf[i] + n, r[k.key], k.tipe);
+      }).join('') + '</row>');
     });
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
       '<dimension ref="A1:' + akhir + '"/>' +
       '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
       '<sheetFormatPr defaultRowHeight="15"/>' +
-      '<cols>' + kols.map((k, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.max(8, Math.min(60, Math.round((k.lebar || 120) / 7))) + '" customWidth="1"/>').join('') + '</cols>' +
+      '<cols>' + kols.map((k, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.max(8, Math.min(60, Math.round((k.lebar || 120) / 7))) + '"' +
+        (formatKolom && gayaKolom(k) ? ' style="' + gayaKolom(k) + '"' : '') + ' customWidth="1"/>').join('') + '</cols>' +
       '<sheetData>' + isi.join('') + '</sheetData>' +
       '<autoFilter ref="A1:' + akhir + '"/>' +
       '</worksheet>';
@@ -90,10 +97,11 @@
     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' +
     '<border><left/><right/><top/><bottom style="thin"><color rgb="FFC7CED9"/></bottom><diagonal/></border></borders>' +
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-    '<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
     '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>' +
     '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
-    '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+    '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+    '<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>' +
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
 
   function xlsx(kols, rows, info) {
@@ -127,9 +135,16 @@
         '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
         '</Relationships>'],
       ['xl/styles.xml', STYLES],
-      ['xl/worksheets/sheet1.xml', sheetData(kols, rows)],
+      ['xl/worksheets/sheet1.xml', sheetData(kols, rows, info.formatKolom)],
       ['xl/worksheets/sheet2.xml', sheetQuery(info.meta || [])]
     ];
+    // meta: null = satu sheet saja (template import)
+    if (info.meta === null) {
+      return zip(berkas.filter(([n]) => n !== 'xl/worksheets/sheet2.xml').map(([n, s]) => [n, s
+        .replace(/<Override PartName="\/xl\/worksheets\/sheet2\.xml"[^>]*\/>/, '')
+        .replace(/<sheet name="[^"]*" sheetId="2" r:id="rId2"\/>/, '')
+        .replace(/<Relationship Id="rId2"[^>]*\/>/, '')]));
+    }
     return zip(berkas);
   }
 

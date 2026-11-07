@@ -73,7 +73,7 @@
   const HARI_INI = new Date('2026-11-02');
   const umur = s => (s ? Math.max(0, Math.round((HARI_INI - new Date(s)) / 86400000)) : null);
 
-  const TEMA = ['HS Code Inconsistency', 'Customs Value Undervaluation', 'FTA Facility Misuse', 'Assessment Expansion', 'High-Risk Importer Profile'];
+  const TEMA = ['Inkonsistensi HS', 'Risiko Nilai Pabean', 'Risiko FTA', 'Perluasan Penetapan', 'Importir Risiko Tinggi'];
 
   // ---------- baris tampilan ----------
   const ROWS = MENTAH.map((m, id) => {
@@ -116,7 +116,7 @@
       kodeFasNama: skepKode ? skepKode.split(',').map(k => k.trim() + ' - ' + (SKEP[k.trim()] || 'FASILITAS ' + k.trim())).join('; ') : null,
       hargaSatuan: mesin.price_per_unit == null ? null : mesin.price_per_unit,
       perluasan,
-      ketInkonsistensi: inkonsistensi ? `[Same description in ${ref.total} series under ${ref.jumlahHs} HS codes; reference HS ${fmtHs(ref.hs)} (${ref.n} series, rate ${ref.tarif == null ? '-' : ref.tarif + '%'}), declared HS ${fmtHs(hs)} rate ${ambil(m, 'tarif')}%${mesin.hs_flag === 'LOWER DUTY' ? ', lower than reference' : ''}]` : null,
+      ketInkonsistensi: inkonsistensi ? `[Uraian sama di ${ref.total} seri dengan ${ref.jumlahHs} HS; HS acuan ${fmtHs(ref.hs)} (${ref.n} seri, tarif ${ref.tarif == null ? '-' : ref.tarif + '%'}), HS diberitahukan ${fmtHs(hs)} tarif ${ambil(m, 'tarif')}%${mesin.hs_flag === 'LOWER DUTY' ? ', lebih rendah dari acuan' : ''}]` : null,
       penetapan,
       penetapanTeks: penetapan.length ? Array.from(new Set(penetapan.map(p => p.jenis + ' ' + p.ref))).join(', ') : null,
       terkunci: !!mesin.assessed,
@@ -154,12 +154,12 @@
       umur: umur(ambil(m, 'tanggal')),
       flag,
       ketPerluasan: flag.perluasan ? [mesin.expansion_ref, mesin.notul_expansion].filter(Boolean).map(s => '[' + s + ']').join(' ') +
-        (exp ? ` [Description ${Math.round(exp.skor * 100)}% similar to finding ${R.labelBatch(exp.batch)}, HS ${fmtHs(exp.baris.hsAsal)} assessed as ${fmtHs(exp.baris.hsTetap)}]` : '') : null,
+        (exp ? ` [Uraian ${Math.round(exp.skor * 100)}% mirip temuan ${R.labelBatch(exp.batch)}, HS ${fmtHs(exp.baris.hsAsal)} ditetapkan menjadi ${fmtHs(exp.baris.hsTetap)}]` : '') : null,
       ketDnda: null,
       ketAudit: flag.audit ? m['Ur Audit'] : null,
       ketPenul: mesin.penulRef ? R.labelBatch(mesin.penulRef.batch) + ' → ' + fmtHs(mesin.penulRef.baris.hsTetap) : null,
       ketNotul: mesin.notul ? 'SPTNP ' + penetapan.filter(p => p.jenis === 'SPTNP').map(p => p.ref).join(', ') + ' (' + mesin.notul + ')' : null,
-      ketSka: flag.ska ? 'SKA form ' + (skepUtama === '54' ? 'E' : skepUtama === '52' ? 'D' : 'AK') + ' does not meet the origin criteria' : null
+      ketSka: flag.ska ? 'SKA Form ' + (skepUtama === '54' ? 'E' : skepUtama === '52' ? 'D' : 'AK') + ' tidak memenuhi ketentuan asal barang' : null
     };
   });
 
@@ -190,7 +190,7 @@
   // ---------- data history penelitian: batch audit, penul, notul dari riwayat mesin ----------
   // periode audit belum ada di batch; dibangkitkan dari tahun PIB seperti versi As-Is
   const PER_KUNCI = new Map(ROWS.map(r => [r.kunci, r]));
-  const NAMA_JENIS = { audit: 'General Audit', penul: 'Re-examination', notul: 'Notul (SPTNP)' };
+  const NAMA_JENIS = { audit: 'Audit (LHA)', penul: 'Penelitian Ulang (LHPU)', notul: 'Notul (SPTNP)' };
   const HISTORY = [];
   for (const b of R.semua()) {
     for (const x of b.baris) {
@@ -198,13 +198,16 @@
       const r = y ? PER_KUNCI.get(y[M.P.aju] + '|' + y[M.P.seri]) : null;
       const k = x.kunci || {};
       const tahun = Number((k.tglPib || '2025').slice(0, 4));
+      // batch hasil import (impor.js, sudah di-Approve): periode audit dari file, status Approved; lainnya = data sistem
+      const awalContoh = b.jenis === 'notul' || b.impor ? null : tahun + '-02-01', akhirContoh = b.jenis === 'notul' || b.impor ? null : (tahun + 1) + '-10-31';
       HISTORY.push({
         id: HISTORY.length, no: HISTORY.length + 1, jenis: NAMA_JENIS[b.jenis], npwp: r ? r.npwp : x.npwp9 || null,
-        st: b.jenis === 'notul' ? R.refBaris(b, x) : b.noSt || R.refBaris(b, x),
-        awal: b.jenis === 'notul' ? null : tahun + '-02-01', akhir: b.jenis === 'notul' ? null : (tahun + 1) + '-10-31',
+        st: b.jenis === 'notul' ? R.refBaris(b, x) : b.noSt || R.refBaris(b, x), lha: R.refBaris(b, x),
+        awal: b.periodeAwal || awalContoh, akhir: b.periodeAkhir || akhirContoh,
+        status: b.impor ? 'Disetujui' : 'Sistem', file: b.impor ? b.file : null, impor: b.impor || null, oleh: b.impor ? b.oleh : null,
         dokumen: DOK.label, kantor: r ? r.kantor : k.kantor || null, noDaftar: k.noPib || (r && r.noPib), tglDaftar: k.tglPib || (r && r.tglDaftar), seri: k.seri,
-        temuan: `${PENETAPAN[b.jenis]} ${R.refBaris(b, x)}: HS ${fmtHs(x.hsAsal) || '-'} assessed as ${fmtHs(x.hsTetap) || '-'}` +
-          (x.tarifTetap == null ? '' : `, BM rate ${x.tarifTetap}%`) + (x.ket ? '. ' + x.ket : ''),
+        temuan: `${PENETAPAN[b.jenis]} ${R.refBaris(b, x)}: HS ${fmtHs(x.hsAsal) || '-'} ditetapkan menjadi ${fmtHs(x.hsTetap) || '-'}` +
+          (x.tarifTetap == null ? '' : `, tarif BM ${x.tarifTetap}%`) + (x.ket ? '. ' + x.ket : ''),
         rowId: r ? r.id : null
       });
     }

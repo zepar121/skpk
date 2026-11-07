@@ -4,13 +4,16 @@
  * paginasi dengan nomor halaman yang bisa diketik, dan virtual scrolling. Kolom yang tampil dan urutannya tetap (kolomBawaan):
  * tanpa pemilih kolom dan tanpa seret judul untuk memindah kolom (permintaan 5 Nov 2026); pin tetap lewat menu kolom.
  * Sengaja TIDAK meniru: dropdown saringan khas Excel (daftar nilai dicentang) dan ikon "buka detail" di kiri baris.
- * Menu kolom hanya berisi Sort (label ikut tipe: A to Z / Smallest to Largest / Oldest to Newest), Custom Sort (urut berlapis seperti
- * dialog Sort di Excel), Pin, Autofit, dan kotak cari biasa (tanpa daftar nilai / saran).
+ * Menu kolom ringkas (6 Nov 2026): kotak Search paling atas, lalu satu baris tombol ikon Sort naik / turun (tooltip ikut tipe: A to Z /
+ * Smallest to Largest / Oldest to Newest), Custom Sort, Pin, Autofit. Kolom yang variasinya sedikit (daftar: true, atau teks dengan
+ * <= BATAS_DAFTAR nilai unik) punya drop list nilai yang baru muncul saat kotak Search diklik / diketik; centang beberapa nilai = "=nilai"
+ * (sama persis), salah satu cocok. Kotak Search juga menerima tempelan daftar (satu nilai per baris, mis. kolom NPWP dari Excel): tiap
+ * baris menjadi chip, bukan satu teks panjang. Saringan banyak nilai disimpan sebagai teks berpemisah baris baru.
  * Seluruh teks tampilan berbahasa Inggris; nama kolom ditampilkan persis seperti label di config.
  *
  * buatTabel(wadah, {
  *   kolom: [{ key, label, lebar, tipe?: 'teks'|'angka'|'tanggal', nilai?: r => nilai mentah, isi?: r => html,
- *             saring?: false (tanpa kotak cari) }],
+ *             saring?: false (tanpa kotak cari), daftar?: true | false (drop list nilai; bawaan: otomatis) }],
  *   kolomBawaan: [key],          // kolom yang tampil, urut (bawaan: semua); kolom lain tetap terbaca (mis. untuk Advance Filter)
  *   data: () => rows,            // dipanggil ulang tiap render
  *   aksi: r => html, klikAksi: (nama, r, el) => {},
@@ -39,7 +42,7 @@
   const VIRTUAL = 120;    // di atas jumlah baris ini hanya baris di sekitar layar yang digambar
   const LEBAR_CEK = 40, LEBAR_NO = 52;
   const urutTeks = new Intl.Collator('id', { numeric: true, sensitivity: 'base' }).compare;
-  const fmtAngka = n => n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+  const fmtAngka = n => n.toLocaleString('id-ID', { maximumFractionDigits: 4 });
 
   // angka dari teks ketikan: "1.000.000", "2,5", "Rp 5000", "10%"
   function keAngka(s) {
@@ -51,7 +54,13 @@
     return Number.isFinite(n) ? n : null;
   }
   // kotak cari kolom: >5, >=5, <5, <=5, =5, 10..20 (angka), * dan ? (wildcard), selain itu "mengandung"
+  // banyak nilai (satu per baris: tempelan daftar atau centang drop list) = salah satu cocok
   function buatUji(q) {
+    const daftar = pisahDaftar(q);
+    if (daftar.length > 1) { const uji = daftar.map(buatUji1); return x => uji.some(u => u(x)); }
+    return buatUji1(daftar[0] || '');
+  }
+  function buatUji1(q) {
     const s = q.trim().toLowerCase();
     const rentang = s.match(/^(.+?)\.\.(.+)$/);
     if (rentang && keAngka(rentang[1]) != null && keAngka(rentang[2]) != null) {
@@ -67,10 +76,18 @@
         return op === '>' ? n > v : op === '>=' ? n >= v : op === '<' ? n < v : op === '<=' ? n <= v : n === v;
       };
     }
+    // =teks = sama persis (pilihan dari drop list nilai); huruf besar/kecil diabaikan
+    if (s[0] === '=' && s.length > 1) {
+      const v = s.slice(1).trim();
+      return x => String(x).trim().toLowerCase() === v;
+    }
     if (/[*?]/.test(s)) {
       const re = new RegExp(s.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.'), 'i');
       return x => re.test(String(x));
     }
+    // angka berpemisah (NPWP 01.234.567.8-901.000, nomor dokumen): cocok juga bila digitnya sama, apa pun pemisahnya
+    const dig = digitSaja(s);
+    if (dig) return x => { const t = String(x); return t.toLowerCase().includes(s) || t.replace(/\D/g, '').includes(dig); };
     return x => String(x).toLowerCase().includes(s);
   }
   // tanggal yyyy-mm-dd juga dicari dalam bentuk tampilnya (dd-mm-yyyy)
@@ -105,9 +122,9 @@
   };
   // label urut mengikuti tipe kolom, seperti Excel
   const LABEL_URUT = {
-    teks: { naik: ['az', 'Sort A to Z'], turun: ['za', 'Sort Z to A'] },
-    angka: { naik: ['kecilBesar', 'Sort Smallest to Largest'], turun: ['besarKecil', 'Sort Largest to Smallest'] },
-    tanggal: { naik: ['lamaBaru', 'Sort Oldest to Newest'], turun: ['baruLama', 'Sort Newest to Oldest'] }
+    teks: { naik: ['az', 'Urutkan A ke Z'], turun: ['za', 'Urutkan Z ke A'] },
+    angka: { naik: ['kecilBesar', 'Urutkan Terkecil ke Terbesar'], turun: ['besarKecil', 'Urutkan Terbesar ke Terkecil'] },
+    tanggal: { naik: ['lamaBaru', 'Urutkan Terlama ke Terbaru'], turun: ['baruLama', 'Urutkan Terbaru ke Terlama'] }
   };
   // tanggal "yyyy-mm-dd..." atau "dd-mm-yyyy" / "dd/mm/yyyy" -> angka yyyymmddhhmmss untuk diurutkan
   function keWaktu(v) {
@@ -117,7 +134,7 @@
     m = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
     return m ? +(m[3] + m[2] + m[1] + '000000') : null;
   }
-  const AGREGAT = [['jumlah', 'Sum'], ['rata', 'Average'], ['hitung', 'Count'], ['hitungAngka', 'Numerical Count'], ['min', 'Min'], ['maks', 'Max']];
+  const AGREGAT = [['jumlah', 'Jumlah'], ['rata', 'Rata-rata'], ['hitung', 'Hitungan'], ['hitungAngka', 'Hitungan Angka'], ['min', 'Min'], ['maks', 'Maks']];
   const isian = el => el && el.closest && el.closest('input:not([type=checkbox]), select, textarea, [contenteditable]');
   const pesan = (judul, isi) => { if (root.skpkToast) root.skpkToast('info', judul, isi); };
 
@@ -144,6 +161,187 @@
     el.style.top = y + 'px';
     jangkar.setAttribute('aria-expanded', 'true');
     menuAktif = { el, jangkar, saatTutup: opsi.saatTutup };
+  }
+
+  // ---------- daftar nilai bertumpuk ----------
+  // teks tempelan (kolom Excel, Notepad) dipecah per baris / tab: tiap baris satu nilai, bukan satu teks panjang; urutan dijaga, duplikat dibuang
+  const pisahDaftar = t => Array.from(new Set(String(t || '').split(/[\r\n\t]+/).map(v => v.trim()).filter(Boolean)));
+  // digit saja bila teks hanya berisi angka dan pemisah (. - / spasi) dengan >= 6 digit; selain itu null
+  const digitSaja = t => { const v = String(t).trim(); if (!/^[\d.\-/\s]+$/.test(v)) return null; const d = v.replace(/\D/g, ''); return d.length >= 6 ? d : null; };
+
+  // ---------- drop list nilai (menu kolom dan Advance Filter) ----------
+  // nilai unik teks, urut A-Z; null bila lebih dari batas (kolom dianggap terlalu bervariasi)
+  const BATAS_DAFTAR = 30;
+  function nilaiUnik(rows, ambil, batas) {
+    const set = new Set();
+    for (const r of rows) {
+      const v = ambil(r);
+      if (v == null || v === '' || v === '-') continue;
+      set.add(String(v));
+      if (batas && set.size > batas) return null;
+    }
+    return Array.from(set).sort(urutTeks);
+  }
+  // pasang drop list di bawah kotak isian: baru tampil saat kotak diklik atau diketik (bukan saat fokus otomatis), menyempit sesuai
+  // ketikan, panah atas / bawah + Enter untuk memilih, Esc menutup daftar saja. ambil() = daftar nilai (dipanggil saat pertama tampil).
+  // opsi.wadah = taruh daftar di dalam elemen itu (menu kolom); tanpa wadah = melayang di body (Advance Filter)
+  function pasangDaftarNilai(inp, ambil, saatPilih, opsi = {}) {
+    let nilai = null, el = null, aktif = -1, cocok = [];
+    const buka = () => {
+      if (nilai == null) nilai = ambil() || [];
+      if (!nilai.length) return;
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'tg-daftar-nilai' + (opsi.wadah ? '' : ' melayang');
+        el.setAttribute('role', 'listbox');
+        el.addEventListener('mousedown', e => e.preventDefault()); // fokus tetap di kotak isian
+        el.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) { aktif = +b.dataset.i; pilih(cocok[aktif]); } });
+        (opsi.wadah || document.body).appendChild(el);
+      }
+      el.hidden = false;
+      gambar();
+    };
+    const tutup = () => { if (el) { if (opsi.wadah) el.hidden = true; else { el.remove(); el = null; } } aktif = -1; };
+    const tampil = () => !!el && !el.hidden;
+    function gambar() {
+      const q = inp.value.trim().replace(/^=/, '').toLowerCase();
+      cocok = q ? nilai.filter(v => v.toLowerCase().includes(q)) : nilai;
+      if (aktif >= cocok.length) aktif = cocok.length - 1;
+      const ada = opsi.terpilih ? opsi.terpilih() : null;
+      el.innerHTML = cocok.length ? cocok.map((v, i) => `<button type="button" class="tg-dn-i${i === aktif ? ' aktif' : ''}" role="option" data-i="${i}" title="${esc(v)}"${ada ? ` aria-selected="${ada.has(v)}"` : ''}>${ada ? `<i class="tg-dn-cek${ada.has(v) ? ' on' : ''}"></i>` : ''}${esc(v)}</button>`).join('')
+        : '<div class="tg-dn-kosong">Tidak ada yang cocok</div>';
+      if (!opsi.wadah) {
+        const r = inp.getBoundingClientRect();
+        el.style.minWidth = r.width + 'px';
+        el.style.left = Math.max(8, Math.min(innerWidth - el.offsetWidth - 8, r.left)) + 'px';
+        const h = el.offsetHeight;
+        el.style.top = (r.bottom + 4 + h > innerHeight - 8 ? Math.max(8, r.top - h - 4) : r.bottom + 4) + 'px';
+      }
+      const b = el.querySelector('.aktif');
+      if (b) b.scrollIntoView({ block: 'nearest' });
+    }
+    // multi (opsi.terpilih ada): pilih = centang / lepas, daftar tetap terbuka
+    function pilih(v) {
+      if (v == null) return;
+      if (opsi.terpilih) { saatPilih(v); if (tampil()) gambar(); return; }
+      tutup();
+      saatPilih(v);
+    }
+    inp.addEventListener('mousedown', () => { if (!tampil()) setTimeout(buka); });
+    inp.addEventListener('input', () => { aktif = -1; if (tampil()) gambar(); else buka(); });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!tampil()) return buka();
+        aktif = Math.max(0, Math.min(cocok.length - 1, aktif + (e.key === 'ArrowDown' ? 1 : -1)));
+        gambar();
+      } else if (e.key === 'Enter' && tampil() && aktif >= 0) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        pilih(cocok[aktif]);
+      } else if (e.key === 'Escape' && tampil()) {
+        e.stopPropagation();
+        tutup();
+      }
+    });
+    inp.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== inp) tutup(); }, 120));
+    return { tutup, segar: () => { if (tampil()) gambar(); } };
+  }
+
+  // Kotak nilai bertumpuk (menu kolom dan Advance Filter). Satu nilai = diketik seperti biasa. Menempel beberapa baris (daftar NPWP,
+  // uraian, nama perusahaan) atau mencentang drop list = tiap nilai menjadi chip; saringan = salah satu chip cocok. Selama ada chip,
+  // ketikan hanya mempersempit drop list; Enter / keluar dari kotak menambahkannya sebagai chip (kecuali ketikan itu dipakai mencari
+  // nilai yang lalu dicentang). Backspace di kotak kosong = hapus chip terakhir. Nilai keluar sebagai teks: tanpa chip = ketikan;
+  // dengan chip = chip dipisah baris baru plus "\n" penutup (tanda daftar, walau chip hanya satu).
+  // o = { nilai, ubah(teks), label, placeholder, prefiks ('=' = centangan drop list sama persis), daftar?: () => nilai[], wadahDaftar,
+  //       pilihPertama?() saat centang pertama, sah?(v) -> chip merah bila false }
+  function pasangKotakDaftar(box, o) {
+    const pre = o.prefiks || '';
+    const awal = String(o.nilai || '');
+    let chip = awal.includes('\n') ? pisahDaftar(awal) : [];
+    let dariDaftar = false;
+    box.classList.add('tg-tag');
+    box.innerHTML = `<input type="text" class="tg-tag-inp" autocomplete="off" spellcheck="false" aria-label="${esc(o.label || 'Nilai')}">`;
+    const inp = box.querySelector('input');
+    inp.value = chip.length ? '' : awal;
+    const nilaiKini = () => (chip.length ? chip.join('\n') + '\n' : inp.value);
+    const kirim = () => o.ubah(nilaiKini());
+    const teksChip = v => (pre && v.startsWith(pre) ? v.slice(pre.length) : v);
+    let dl = null;
+    function gambar() {
+      box.querySelectorAll('.tg-chip, .tg-tag-x').forEach(x => x.remove());
+      const frag = document.createDocumentFragment();
+      chip.forEach((v, i) => {
+        const c = document.createElement('span');
+        const t = teksChip(v);
+        c.className = 'tg-chip' + (pre && v.startsWith(pre) ? ' persis' : '') + (o.sah && !o.sah(t) ? ' galat' : '');
+        c.title = t;
+        c.innerHTML = `<span>${esc(t)}</span><button type="button" data-chip="${i}" title="Hapus" aria-label="Hapus ${esc(t)}">${IK.x}</button>`;
+        frag.appendChild(c);
+      });
+      box.insertBefore(frag, inp);
+      if (chip.length > 1) box.insertAdjacentHTML('beforeend', `<button type="button" class="tg-tag-x" title="Hapus semua (${chip.length})" aria-label="Hapus semua">${IK.x}</button>`);
+      box.classList.toggle('berchip', chip.length > 0);
+      inp.placeholder = chip.length ? '' : (o.placeholder || '');
+      if (dl) dl.segar();
+    }
+    const tambah = vs => { for (const v of vs) if (!chip.includes(v)) chip.push(v); };
+    function komit() {
+      const t = inp.value.trim();
+      if (chip.length && t && !dariDaftar) { tambah([t]); inp.value = ''; gambar(); kirim(); }
+      else if (chip.length && dariDaftar) inp.value = '';
+      dariDaftar = false;
+    }
+    if (o.daftar) dl = pasangDaftarNilai(inp, o.daftar, v => {
+      const x = pre + v, i = chip.indexOf(x);
+      if (i >= 0) chip.splice(i, 1);
+      else { if (!chip.length && o.pilihPertama) o.pilihPertama(); chip.push(x); }
+      dariDaftar = true;
+      gambar();
+      kirim();
+    }, { wadah: o.wadahDaftar, terpilih: () => new Set(chip.filter(v => !pre || v.startsWith(pre)).map(teksChip)) });
+    inp.addEventListener('input', () => { dariDaftar = false; if (!chip.length) kirim(); });
+    inp.addEventListener('paste', e => {
+      const vs = pisahDaftar((e.clipboardData || window.clipboardData).getData('text'));
+      if (!vs.length || (vs.length < 2 && !chip.length)) return; // satu nilai tanpa chip: tempel biasa
+      e.preventDefault();
+      const ketik = inp.value.trim();
+      if (!chip.length && ketik) tambah([ketik]);
+      tambah(vs);
+      inp.value = '';
+      dariDaftar = false;
+      gambar();
+      kirim();
+    });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && chip.length && inp.value.trim() && !dariDaftar) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        komit();
+      } else if (e.key === 'Backspace' && !inp.value && chip.length) {
+        chip.pop();
+        gambar();
+        kirim();
+      }
+    });
+    inp.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== inp && box.isConnected) komit(); }, 130));
+    // klik area kotak (di luar chip / tombol) = fokus ke kotak ketik; tombol chip tidak mencuri fokus
+    box.addEventListener('mousedown', e => {
+      if (e.target.closest('button')) e.preventDefault();
+      else if (e.target !== inp) { e.preventDefault(); inp.focus(); }
+    });
+    box.addEventListener('click', e => {
+      const b = e.target.closest('[data-chip]');
+      if (b) { chip.splice(+b.dataset.chip, 1); gambar(); kirim(); inp.focus(); return; }
+      if (e.target.closest('.tg-tag-x')) { chip = []; inp.value = ''; gambar(); kirim(); inp.focus(); }
+    });
+    gambar();
+    return {
+      input: inp,
+      nilai: nilaiKini,
+      komit,
+      kosongkan() { chip = []; inp.value = ''; dariDaftar = false; gambar(); kirim(); }
+    };
   }
   document.addEventListener('pointerdown', e => {
     if (menuAktif && !menuAktif.el.contains(e.target) && !menuAktif.jangkar.contains(e.target)) tutupMenu();
@@ -227,27 +425,27 @@
         const kelas = ['t-' + k.tipe, pin && 'tg-pin', k.key === akhirPin && 'tg-pin-akhir'].filter(Boolean).join(' ');
         return `<th data-kol="${esc(k.key)}" class="${kelas}"${pin ? ` style="left:${kiri[k.key]}px"` : ''}>
           <div class="tg-th"><button type="button" class="tg-th-label" data-label="${esc(k.key)}" title="${esc(k.label)}"><span class="judul-kolom">${esc(k.label)}</span><span class="tg-urut"></span></button>
-          <button type="button" class="tg-th-menu" data-menu="${esc(k.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="Column menu ${esc(k.label)}" title="Column menu">${IK.bawah}</button></div>
+          <button type="button" class="tg-th-menu" data-menu="${esc(k.key)}" aria-haspopup="menu" aria-expanded="false" aria-label="Menu kolom ${esc(k.label)}" title="Menu kolom">${IK.bawah}</button></div>
           <span class="tg-ubah" data-ubah="${esc(k.key)}" aria-hidden="true"></span></th>`;
       };
       wadah.innerHTML = `
         <div class="tg">
           <div class="tg-pilihan" hidden></div>
-          <div class="tg-gulir" tabindex="0" aria-label="Table">
+          <div class="tg-gulir" tabindex="0" aria-label="Tabel">
             <table class="tg-tabel" style="width:${totalLebar}px">
               <colgroup>${cfg.centang ? `<col style="width:${LEBAR_CEK}px">` : ''}${cfg.nomor ? `<col style="width:${LEBAR_NO}px">` : ''}${ks.map(k => `<col style="width:${lebar(k)}px">`).join('')}${cfg.aksi ? `<col style="width:${LEBAR_AKSI}px">` : ''}</colgroup>
               <thead><tr>
-                ${cfg.centang ? `<th class="tg-cek tg-tetap" style="left:0"><label class="tg-cek-isi" title="Select all on this page"><input type="checkbox" data-semua aria-label="Select all on this page"></label></th>` : ''}
+                ${cfg.centang ? `<th class="tg-cek tg-tetap" style="left:0"><label class="tg-cek-isi" title="Pilih semua di halaman ini"><input type="checkbox" data-semua aria-label="Pilih semua di halaman ini"></label></th>` : ''}
                 ${cfg.nomor ? `<th class="tg-no tg-tetap t-angka" style="left:${tetapKiri}px"><span class="judul-kolom">No</span></th>` : ''}
                 ${ks.map(th).join('')}
-                ${cfg.aksi ? '<th class="tg-aksi"><span class="judul-kolom">Actions</span></th>' : ''}
+                ${cfg.aksi ? '<th class="tg-aksi"><span class="judul-kolom">Aksi</span></th>' : ''}
               </tr></thead>
               <tbody></tbody>
             </table>
           </div>
           <div class="tg-status">
             <div class="tg-status-kiri"></div>
-            <div class="tg-status-kanan"><button type="button" class="tg-agregat" hidden aria-haspopup="menu" aria-expanded="false"></button><nav class="tg-pager" aria-label="Pagination"></nav></div>
+            <div class="tg-status-kanan"><button type="button" class="tg-agregat" hidden aria-haspopup="menu" aria-expanded="false"></button><nav class="tg-pager" aria-label="Paginasi"></nav></div>
           </div>
         </div>`;
       const g = ambil('.tg-gulir');
@@ -303,7 +501,7 @@
       const i = st.awal + iHal;
       const kelas = [st.pilih.has(r.id) && 'dipilih', cfg.kelasBaris && cfg.kelasBaris(r)].filter(Boolean).join(' ');
       return `<tr data-id="${r.id}" data-i="${i}" class="${kelas}">
-        ${cfg.centang ? `<td class="tg-cek tg-tetap" style="left:0"><label class="tg-cek-isi"><input type="checkbox" data-pilih="${r.id}" ${st.pilih.has(r.id) ? 'checked' : ''} aria-label="Select row"></label></td>` : ''}
+        ${cfg.centang ? `<td class="tg-cek tg-tetap" style="left:0"><label class="tg-cek-isi"><input type="checkbox" data-pilih="${r.id}" ${st.pilih.has(r.id) ? 'checked' : ''} aria-label="Pilih baris"></label></td>` : ''}
         ${cfg.nomor ? `<td class="tg-no tg-tetap t-angka" style="left:${cfg.centang ? LEBAR_CEK : 0}px">${i + 1}</td>` : ''}
         ${ks.map(k => {
           const v = nilai(k, r);
@@ -319,7 +517,7 @@
     function gambarBadan(paksa) {
       const tbody = ambil('tbody');
       if (!st.isi.length) {
-        tbody.innerHTML = `<tr class="tg-kosong"><td colspan="${jumlahKolom()}"><div class="tg-kosong-isi">${IK.kosong}<span>No data found</span>${adaSaring() ? '<button type="button" class="tautan" data-hapus-saring>Clear column filters</button>' : ''}</div></td></tr>`;
+        tbody.innerHTML = `<tr class="tg-kosong"><td colspan="${jumlahKolom()}"><div class="tg-kosong-isi">${IK.kosong}<span>Data tidak ditemukan</span>${adaSaring() ? '<button type="button" class="tautan" data-hapus-saring>Hapus filter kolom</button>' : ''}</div></td></tr>`;
         return;
       }
       if (!virtual()) {
@@ -376,7 +574,7 @@
         const m = th.querySelector('.tg-th-menu');
         m.classList.toggle('aktif', disaring);
         m.innerHTML = disaring ? IK.saring : IK.bawah;
-        m.title = disaring ? 'Filtered: ' + st.saring[key] : 'Column menu';
+        m.title = disaring ? 'Filter: ' + pisahDaftar(st.saring[key]).map(v => v.replace(/^=/, '')).join(', ') : 'Menu kolom';
         th.classList.toggle('tg-kol-pilih', st.kolPilih.includes(key));
         th.classList.toggle('tg-kol-aktif', !!st.aktif && st.aktif.key === key && !st.kolPilih.length);
       });
@@ -386,15 +584,15 @@
     // tanpa "dari M" (jumlah sebelum saringan kolom): menghitungnya memanggil ulang data() di tiap render (permintaan 5 Nov 2026)
     function gambarStatus(total, jmlHal) {
       const kiri = ambil('.tg-status-kiri');
-      kiri.innerHTML = `<span class="tg-jumlah${adaSaring() ? ' terfilter' : ''}"><b>${total.toLocaleString('en-US')}</b> rows</span>` +
+      kiri.innerHTML = `<span class="tg-jumlah${adaSaring() ? ' terfilter' : ''}"><b>${total.toLocaleString('id-ID')}</b> baris</span>` +
         (cfg.ringkas && total ? `<span class="tg-ringkas">${cfg.ringkas(st.rows)}</span>` : '') +
-        (adaSaring() ? `<button type="button" class="tautan" data-hapus-saring title="Clear all column filters">Clear column filters</button>` : '');
+        (adaSaring() ? `<button type="button" class="tautan" data-hapus-saring title="Hapus semua filter kolom">Hapus filter kolom</button>` : '');
       const b = (hal, ik, label, mati) => `<button type="button" class="tg-btn-ikon" data-hal="${hal}" title="${label}" aria-label="${label}"${mati ? ' disabled' : ''}>${ik}</button>`;
       ambil('.tg-pager').innerHTML =
-        b(1, IK.awal, 'First page', st.hal <= 1) + b(st.hal - 1, IK.mundur, 'Previous page', st.hal <= 1) +
-        `<span class="tg-hal"><input data-goto value="${st.hal}" inputmode="numeric" aria-label="Page number" title="Page number"><span>/ ${jmlHal.toLocaleString('en-US')}</span></span>` +
-        b(st.hal + 1, IK.maju, 'Next page', st.hal >= jmlHal) + b(jmlHal, IK.akhir, 'Last page', st.hal >= jmlHal) +
-        `<select data-ukuran title="Rows per page" aria-label="Rows per page">${UKURAN.map(n => `<option value="${n}" ${n === st.ukuran ? 'selected' : ''}>${n ? n + ' / page' : 'All (' + total.toLocaleString('en-US') + ')'}</option>`).join('')}</select>`;
+        b(1, IK.awal, 'Halaman pertama', st.hal <= 1) + b(st.hal - 1, IK.mundur, 'Halaman sebelumnya', st.hal <= 1) +
+        `<span class="tg-hal"><input data-goto value="${st.hal}" inputmode="numeric" aria-label="Nomor halaman" title="Nomor halaman"><span>/ ${jmlHal.toLocaleString('id-ID')}</span></span>` +
+        b(st.hal + 1, IK.maju, 'Halaman berikutnya', st.hal >= jmlHal) + b(jmlHal, IK.akhir, 'Halaman terakhir', st.hal >= jmlHal) +
+        `<select data-ukuran title="Baris per halaman" aria-label="Baris per halaman">${UKURAN.map(n => `<option value="${n}" ${n === st.ukuran ? 'selected' : ''}>${n ? n + ' / halaman' : 'Semua (' + total.toLocaleString('id-ID') + ')'}</option>`).join('')}</select>`;
       gambarAgregat();
     }
 
@@ -402,15 +600,15 @@
     function gambarPilihanStrip() {
       const el = ambil('.tg-pilihan');
       if (!cfg.centang || !st.pilih.size) { el.hidden = true; return; }
-      const fmt = n => n.toLocaleString('en-US');
+      const fmt = n => n.toLocaleString('id-ID');
       const halPenuh = st.isi.length > 0 && st.isi.every(r => st.pilih.has(r.id));
       const semuaHasil = st.rows.length > 0 && st.rows.every(r => st.pilih.has(r.id));
       // stripRingkas: jumlah terpilih sudah tampil di luar tabel, strip hanya untuk "pilih semua hasil saringan"
       if (cfg.stripRingkas && !(halPenuh && st.rows.length > st.isi.length)) { el.hidden = true; return; }
-      let teks = `<b>${fmt(st.pilih.size)}</b> selected.`;
-      if (semuaHasil && st.rows.length > st.isi.length) teks = `All <b>${fmt(st.rows.length)}</b> filtered rows selected.`;
-      else if (halPenuh && st.rows.length > st.isi.length) teks = `All <b>${fmt(st.isi.length)}</b> rows on this page selected. <button type="button" class="tautan" data-pilih-semua>Select all ${fmt(st.rows.length)} rows</button>`;
-      el.innerHTML = `<span class="tg-pilihan-ik">${IK.cek}</span><span>${teks}</span><button type="button" class="tautan" data-batal-pilih>Clear selection</button>`;
+      let teks = `<b>${fmt(st.pilih.size)}</b> dipilih.`;
+      if (semuaHasil && st.rows.length > st.isi.length) teks = `Semua <b>${fmt(st.rows.length)}</b> baris hasil filter dipilih.`;
+      else if (halPenuh && st.rows.length > st.isi.length) teks = `Semua <b>${fmt(st.isi.length)}</b> baris di halaman ini dipilih. <button type="button" class="tautan" data-pilih-semua>Pilih semua ${fmt(st.rows.length)} baris</button>`;
+      el.innerHTML = `<span class="tg-pilihan-ik">${IK.cek}</span><span>${teks}</span><button type="button" class="tautan" data-batal-pilih>Batal Pilih</button>`;
       el.hidden = false;
     }
 
@@ -529,7 +727,15 @@
       return { teks: rows.map(r => ks.map(k => sel(nilai(k, r))).join('\t')).join('\n'), baris: rows.length, kolom: ks.length };
     }
 
-    // ---------- menu kolom: urut, pin, lebar pas isi, cari (tanpa daftar nilai) ----------
+    // ---------- menu kolom (ringkas): Search paling atas (+ drop list nilai), lalu satu baris ikon urut / pin / lebar pas isi ----------
+    // kolom berhak drop list: daftar: true, atau teks (bukan daftar: false) dengan <= BATAS_DAFTAR nilai unik (diperiksa sekali per tabel)
+    const bisaDaftar = new Map();
+    function punyaDaftar(k) {
+      if (k.daftar != null) return !!k.daftar;
+      if (k.tipe !== 'teks') return false;
+      if (!bisaDaftar.has(k.key)) bisaDaftar.set(k.key, nilaiUnik(cfg.data(), r => nilai(k, r), BATAS_DAFTAR) != null);
+      return bisaDaftar.get(k.key);
+    }
     function bukaMenuKolom(key, jangkar) {
       if (menuAktif && menuAktif.jangkar === jangkar) { tutupMenu(); return; }
       const k = PER_KEY.get(key);
@@ -539,24 +745,24 @@
       const el = document.createElement('div');
       el.className = 'tg-menu tg-menu-kolom';
       el.setAttribute('role', 'menu');
-      el.setAttribute('aria-label', 'Column menu ' + k.label);
+      el.setAttribute('aria-label', 'Menu kolom ' + k.label);
       const LU = LABEL_URUT[k.tipe] || LABEL_URUT.teks;
-      const opsiUrut = arah => `<button type="button" class="tg-mi" data-m="${arah}" role="menuitemcheckbox" aria-checked="${urut === arah}">${IK[LU[arah][0]]}${LU[arah][1]}<span class="tg-mi-cek kanan">${urut === arah ? IK.cek : ''}</span></button>`;
+      const ikon = (m, ik, judul, nyala) => `<button type="button" class="tg-mk${nyala ? ' aktif' : ''}" data-m="${m}" title="${judul}" aria-label="${judul}"${nyala != null ? ` aria-pressed="${!!nyala}"` : ''}>${ik}</button>`;
       el.innerHTML = `
-        ${opsiUrut('naik')}
-        ${opsiUrut('turun')}
-        <button type="button" class="tg-mi" data-m="kustom">${IK.kustom}Custom Sort${st.urut.length > 1 ? `<span class="tg-mi-nilai">${st.urut.length}</span>` : ''}</button>
-        <div class="tg-sep"></div>
-        <button type="button" class="tg-mi" data-m="pin">${IK.pin}${dipin ? 'Unpin Column' : 'Pin Column'}</button>
-        <button type="button" class="tg-mi" data-m="pas">${IK.pas}Autofit Width</button>
-        ${k.saring === false ? '' : `<div class="tg-sep"></div>
-        <div class="tg-menu-cari${st.saring[key] ? ' terisi' : ''}">${IK.cari}<input type="text" data-cari placeholder="Search" value="${esc(st.saring[key] || '')}" aria-label="Search in ${esc(k.label)}" autocomplete="off" spellcheck="false">
-          <button type="button" class="tg-btn-ikon kecil" data-m="hapus-cari" title="Clear" aria-label="Clear search"${st.saring[key] ? '' : ' hidden'}>${IK.x}</button></div>`}`;
-      const cari = el.querySelector('[data-cari]');
-      let jeda = 0;
+        ${k.saring === false ? '' : `<div class="tg-menu-cari${st.saring[key] ? ' terisi' : ''}">${IK.cari}<div data-cari></div>
+          <button type="button" class="tg-btn-ikon kecil" data-m="hapus-cari" title="Hapus" aria-label="Hapus pencarian"${st.saring[key] ? '' : ' hidden'}>${IK.x}</button></div>
+        <div class="tg-menu-daftar"></div>`}
+        <div class="tg-menu-ikon" role="group" aria-label="Aksi kolom">
+          ${ikon('naik', IK[LU.naik[0]], LU.naik[1], urut === 'naik')}${ikon('turun', IK[LU.turun[0]], LU.turun[1], urut === 'turun')}
+          ${ikon('kustom', IK.kustom + (st.urut.length > 1 ? `<span class="tg-mk-n">${st.urut.length}</span>` : ''), 'Urutan Kustom')}
+          <span class="tg-mk-sela"></span>
+          ${ikon('pin', IK.pin, dipin ? 'Lepas Kunci' : 'Kunci Kolom', dipin)}${ikon('pas', IK.pas, 'Lebar Otomatis')}
+        </div>`;
+      const wadahCari = el.querySelector('[data-cari]');
+      let jeda = 0, kotak = null;
       const terapCari = () => {
         clearTimeout(jeda);
-        const v = cari.value;
+        const v = kotak.nilai();
         if ((st.saring[key] || '') === v) return;
         if (v) st.saring[key] = v; else delete st.saring[key];
         el.querySelector('.tg-menu-cari').classList.toggle('terisi', !!v);
@@ -564,10 +770,17 @@
         st.hal = 1;
         render(); // tanpa gulir ke atas: gulir menutup menu
       };
-      if (cari) {
-        cari.addEventListener('input', () => { clearTimeout(jeda); jeda = setTimeout(terapCari, 220); });
-        cari.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); terapCari(); tutupMenu(); jangkar.focus(); } });
+      // kotak bertumpuk: ketik satu nilai, tempel daftar (satu nilai per baris), atau centang beberapa nilai di drop list
+      // (kolom bervariasi sedikit; centang = sama persis, menu tetap terbuka). Enter = terapkan dan tutup
+      if (wadahCari) {
+        kotak = pasangKotakDaftar(wadahCari, {
+          nilai: st.saring[key] || '', label: 'Cari di ' + k.label, placeholder: 'Cari', prefiks: '=',
+          daftar: punyaDaftar(k) ? () => nilaiUnik(cfg.data(), r => nilai(k, r)) : null, wadahDaftar: el.querySelector('.tg-menu-daftar'),
+          ubah: () => { clearTimeout(jeda); jeda = setTimeout(terapCari, 220); }
+        });
+        kotak.input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); kotak.komit(); terapCari(); tutupMenu(); jangkar.focus(); } });
       }
+      const cari = kotak && kotak.input;
       el.addEventListener('click', e => {
         const b = e.target.closest('[data-m]');
         if (!b) return;
@@ -576,9 +789,9 @@
         else if (m === 'kustom') { tutupMenu(); bukaUrutKustom(); }
         else if (m === 'pin') { tutupMenu(); aturPin(key, !dipin); }
         else if (m === 'pas') { tutupMenu(); pasLebar(st.kolPilih.includes(key) ? st.kolPilih : [key]); }
-        else if (m === 'hapus-cari') { cari.value = ''; terapCari(); cari.focus(); }
+        else if (m === 'hapus-cari') { kotak.kosongkan(); terapCari(); cari.focus(); }
       });
-      pasangMenu(el, jangkar, { saatTutup: () => { if (cari && cari.value !== (st.saring[key] || '')) terapCari(); } });
+      pasangMenu(el, jangkar, { saatTutup: () => { if (kotak) { kotak.komit(); if (kotak.nilai() !== (st.saring[key] || '')) terapCari(); } } });
       if (cari) { cari.focus(); cari.select(); }
     }
 
@@ -592,28 +805,28 @@
       if (!L.length) L = [{ key: '', arah: 'naik' }];
       const lap = document.createElement('div');
       lap.className = 'modal-latar';
-      lap.innerHTML = `<div class="modal tg-urut-dialog" role="dialog" aria-modal="true" aria-label="Custom Sort">
-        <div class="modal-kepala">Custom Sort<button class="tutup" data-u="batal" aria-label="Close">×</button></div>
+      lap.innerHTML = `<div class="modal tg-urut-dialog" role="dialog" aria-modal="true" aria-label="Urutan Kustom">
+        <div class="modal-kepala">Urutan Kustom<button class="tutup" data-u="batal" aria-label="Tutup">×</button></div>
         <div class="modal-isi"><div class="tg-urut-daftar" data-u="daftar"></div></div>
-        <div class="modal-kaki"><button class="btn btn-garis tg-urut-hapus" data-u="hapus-semua">Clear</button><span class="tg-urut-sela"></span><button class="btn btn-garis" data-u="batal">Cancel</button><button class="btn btn-biru" data-u="ok">OK</button></div>
+        <div class="modal-kaki"><button class="btn btn-garis tg-urut-hapus" data-u="hapus-semua">Reset</button><span class="tg-urut-sela"></span><button class="btn btn-garis" data-u="batal">Batal</button><button class="btn btn-biru" data-u="ok">OK</button></div>
       </div>`;
       const opsiKolom = key => `<option value=""${key ? '' : ' selected'}></option>` + kolom.map(k => `<option value="${esc(k.key)}"${k.key === key ? ' selected' : ''}>${esc(k.label)}</option>`).join('');
       const opsiArah = u => {
         if (!u.key) return '<option value="naik"></option>';
         const LU = LABEL_URUT[PER_KEY.get(u.key).tipe] || LABEL_URUT.teks;
-        return ['naik', 'turun'].map(a => `<option value="${a}"${u.arah === a ? ' selected' : ''}>${LU[a][1].replace(/^Sort /, '')}</option>`).join('');
+        return ['naik', 'turun'].map(a => `<option value="${a}"${u.arah === a ? ' selected' : ''}>${LU[a][1].replace(/^Urutkan /, '')}</option>`).join('');
       };
       const gambar = () => {
         lap.querySelector('[data-u="daftar"]').innerHTML = L.map((u, i) => `<div class="tg-urut-level" data-i="${i}">
-          <span class="tg-urut-label">${i ? 'Then by' : 'Sort by'}</span>
-          <select class="sel" data-f="key" data-i="${i}" aria-label="Column, level ${i + 1}">${opsiKolom(u.key)}</select>
-          <select class="sel" data-f="arah" data-i="${i}" aria-label="Order, level ${i + 1}"${u.key ? '' : ' disabled'}>${opsiArah(u)}</select>
+          <span class="tg-urut-label">${i ? 'Lalu menurut' : 'Urutkan menurut'}</span>
+          <select class="sel" data-f="key" data-i="${i}" aria-label="Kolom, level ${i + 1}">${opsiKolom(u.key)}</select>
+          <select class="sel" data-f="arah" data-i="${i}" aria-label="Urutan, level ${i + 1}"${u.key ? '' : ' disabled'}>${opsiArah(u)}</select>
           <span class="tg-urut-alat">
-            <button type="button" class="tg-btn-ikon kecil" data-u="naik" data-i="${i}" title="Move Up" aria-label="Move level up"${i ? '' : ' disabled'}>${IK.atas}</button>
-            <button type="button" class="tg-btn-ikon kecil" data-u="turun" data-i="${i}" title="Move Down" aria-label="Move level down"${i < L.length - 1 ? '' : ' disabled'}>${IK.bawah}</button>
-            <button type="button" class="tg-btn-ikon kecil" data-u="hapus" data-i="${i}" title="Delete Level" aria-label="Delete level">${IK.x}</button>
+            <button type="button" class="tg-btn-ikon kecil" data-u="naik" data-i="${i}" title="Naik" aria-label="Naikkan level"${i ? '' : ' disabled'}>${IK.atas}</button>
+            <button type="button" class="tg-btn-ikon kecil" data-u="turun" data-i="${i}" title="Turun" aria-label="Turunkan level"${i < L.length - 1 ? '' : ' disabled'}>${IK.bawah}</button>
+            <button type="button" class="tg-btn-ikon kecil" data-u="hapus" data-i="${i}" title="Hapus Level" aria-label="Hapus level">${IK.x}</button>
           </span>
-          ${i === L.length - 1 ? `<button type="button" class="tg-urut-tambah" data-u="tambah" title="Add Level" aria-label="Add level">${IK.tambah}</button>` : '<span></span>'}</div>`).join('');
+          ${i === L.length - 1 ? `<button type="button" class="tg-urut-tambah" data-u="tambah" title="Tambah Level" aria-label="Tambah level">${IK.tambah}</button>` : '<span></span>'}</div>`).join('');
         // satu kolom satu level: kolom yang sudah dipakai level lain tidak bisa dipilih lagi
         lap.querySelectorAll('select[data-f="key"]').forEach(sel => {
           const i = +sel.dataset.i;
@@ -859,8 +1072,8 @@
       if (!h) return;
       e.preventDefault();
       e.clipboardData.setData('text/plain', h.teks);
-      const fmt = n => n.toLocaleString('en-US');
-      pesan('Copied', `${fmt(h.baris)} rows × ${fmt(h.kolom)} columns` + (h.halaman ? ' (this page only)' : ''));
+      const fmt = n => n.toLocaleString('id-ID');
+      pesan('Tersalin', `${fmt(h.baris)} baris × ${fmt(h.kolom)} kolom` + (h.halaman ? ' (halaman ini saja)' : ''));
     });
 
     // tarik isi tabel dengan mouse untuk menggeser (seperti tangan di peta); klik biasa tetap jalan
@@ -944,6 +1157,12 @@
   }
 
   root.buatTabel = buatTabel;
+  root.pasangDaftarNilai = pasangDaftarNilai;
+  root.pasangKotakDaftar = pasangKotakDaftar;
+  root.pisahDaftarSkpk = pisahDaftar;
+  root.digitSajaSkpk = digitSaja;
+  root.nilaiUnikSkpk = nilaiUnik;
+  root.BATAS_DAFTAR_SKPK = BATAS_DAFTAR;
   root.esc = esc;
   root.keAngkaSkpk = keAngka;
 })(window);
